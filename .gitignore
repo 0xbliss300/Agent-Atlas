@@ -50,4 +50,5 @@ test-results/
 .npmrc
 .nvmrc
 PROJECT_TODO.md
+AGENTS.md
 .prettierignore
