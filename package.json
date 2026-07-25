@@ -1,0 +1,43 @@
+{
+  "name": "agent-atlas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^20.18.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "npm run test:unit && npm run test:components",
+    "test:unit": "node --test src/data/backup.test.js src/data/codexContext.test.js src/data/guide.test.js src/data/localStatus.test.js src/data/noteWorkspace.test.js src/data/organization.test.js src/data/projectEvents.test.js src/data/projectImport.test.js src/data/projects.test.js src/data/researchNotes.test.js src/data/settings.test.js src/data/templates.test.js src/data/workbench.test.js src/routing.test.js",
+    "test:components": "vitest run --config vitest.config.mjs",
+    "lint": "eslint src vite.config.mjs",
+    "format": "prettier --write src vite.config.mjs vitest.config.mjs eslint.config.js package.json",
+    "format:check": "prettier --check src vite.config.mjs vitest.config.mjs eslint.config.js package.json",
+    "check": "npm run lint && npm run format:check && npm test && npm run build"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/noto-sans-sc": "^5.2.9",
+    "@fontsource/noto-serif-sc": "^5.2.8",
+    "@phosphor-icons/react": "^2.1.10",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "vite": "6.4.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react": "^7.37.5",
+    "jsdom": "^26.1.0",
+    "prettier": "^3.6.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -9,6 +9,10 @@
   把分散的 Agent 项目、研究笔记、任务与开发历史整理成一张可导航的本地地图。
 </p>
 
+<p align="center">
+  <a href="https://github.com/0xbliss300/Agent-Atlas">GitHub · 0xbliss300/Agent-Atlas</a>
+</p>
+
 ---
 
 ## 项目简介
@@ -66,7 +70,15 @@ Agent Atlas 是一个仅在本机运行的个人 AI Agent 项目工作台。它�
 - Vitest + React Testing Library + jsdom
 - ESLint + Prettier
 
-应用没有服务端运行时依赖。构建产物是静态前端，但项目约束为 **仅供本地使用，禁止发布或部署到公开网络**。
+应用没有服务端运行时依赖。构建产物是静态前端；源代码可以在 GitHub 开放协作，但应用本身仍坚持本地运行，不提供托管实例，也不会上传用户数据。
+
+## GitHub 与开源协作
+
+- 项目作者：[`0xbliss300`](https://github.com/0xbliss300)
+- 源代码仓库：[`0xbliss300/Agent-Atlas`](https://github.com/0xbliss300/Agent-Atlas)
+- 克隆地址：`https://github.com/0xbliss300/Agent-Atlas.git`
+
+欢迎通过 GitHub 查看代码、提交 Issue 或参与改进。提交前请运行 `npm run check`，并确保没有提交本地数据、环境变量、构建产物、日志或浏览器验收文件。
 
 ## 环境要求
 
@@ -290,7 +302,7 @@ Agent Atlas 延续轻量编辑索引风格：
 - 不执行 Markdown 原始 HTML；
 - 不自动扫描本地文件；
 - 不把指南或图标写入业务备份；
-- **禁止发布或部署本项目到公开网络。**
+- 可以公开源代码，但不要把应用部署为承载个人项目数据的公开服务。
 
 ---
 
