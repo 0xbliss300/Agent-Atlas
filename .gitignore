@@ -49,6 +49,7 @@ test-results/
 # Local-only machine configuration
 .npmrc
 .nvmrc
+.prettierignore
 PROJECT_TODO.md
 AGENTS.md
-.prettierignore
+
