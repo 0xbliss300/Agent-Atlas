@@ -82,6 +82,7 @@ Agent Atlas 是一个仅在本机运行的个人 AI Agent 项目工作台。它�
 
 欢迎通过 GitHub 查看代码、提交 Issue 或参与改进。提交前请运行 `npm run check`，并确保没有提交本地数据、环境变量、构建产物、日志或浏览器验收文件。
 
+
 ## 环境要求
 
 - 推荐 Node.js **22.12+**
@@ -265,8 +266,6 @@ agent-project-showcase/
 │  └─ styles.css         # 设计系统与响应式样式
 ├─ scripts/
 │  └─ dataPersistencePlugin.mjs # 受限本地文件 API 与原子写入
-├─ AGENTS.md             # 持久设计和开发约束
-├─ PROJECT_TODO.md       # 任务、进度和验收记录
 └─ README.md
 ```
 
@@ -296,8 +295,6 @@ npm run check
 
 - 面向用户的完整操作说明位于 [`src/content/USER_GUIDE.md`](src/content/USER_GUIDE.md)，并渲染在 `#/guide`。
 - 用户可见功能变化时，应同步更新使用指南中的入口、步骤、数据影响和安全边界。
-- 开发任务和验收状态以 [`PROJECT_TODO.md`](PROJECT_TODO.md) 为准。
-- 持久设计决策和本地优先约束记录在 [`AGENTS.md`](AGENTS.md)。
 
 ## 设计语言
 
