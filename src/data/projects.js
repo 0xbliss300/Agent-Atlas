@@ -3,6 +3,7 @@ import {
   normalizeProjectTags,
   validateProjectTags,
 } from "./organization.js";
+import { getAppStorage } from "./filePersistence.js";
 
 export const PROJECT_SCHEMA_VERSION = 1;
 export const PROJECT_STORAGE_KEY = "agent-project-showcase.projects.v1";
@@ -552,7 +553,7 @@ export function importProjectBackup(raw, existingProjects = [], mode = "merge") 
   return { projects: merged, importedCount: imported.length, reassignedIds, idMap };
 }
 
-export function loadProjectStore(storage = globalThis.localStorage) {
+export function loadProjectStore(storage = getAppStorage()) {
   if (!storage) return { projects: [], error: null };
   const raw = storage.getItem(PROJECT_STORAGE_KEY);
   if (!raw) return { projects: [], error: null };
@@ -571,7 +572,7 @@ export function loadProjectStore(storage = globalThis.localStorage) {
   }
 }
 
-export function saveProjectStore(projects, storage = globalThis.localStorage) {
+export function saveProjectStore(projects, storage = getAppStorage()) {
   if (!storage) throw new Error("当前浏览器不支持本地存储。");
   storage.setItem(
     PROJECT_STORAGE_KEY,

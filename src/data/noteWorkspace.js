@@ -1,4 +1,5 @@
 import { getResearchNoteExcerpt } from "./researchNotes.js";
+import { getAppStorage } from "./filePersistence.js";
 
 export const NOTE_DRAFT_SCHEMA_VERSION = 1;
 export const NOTE_HISTORY_SCHEMA_VERSION = 1;
@@ -89,7 +90,7 @@ export function deleteResearchNoteDraftsForProject(drafts = [], projectId = "") 
   return drafts.filter((draft) => draft.projectId !== projectId);
 }
 
-export function loadResearchNoteDraftStore(storage = globalThis.localStorage) {
+export function loadResearchNoteDraftStore(storage = getAppStorage()) {
   if (!storage) return { drafts: [], error: null };
   const raw = storage.getItem(NOTE_DRAFT_STORAGE_KEY);
   if (!raw) return { drafts: [], error: null };
@@ -107,7 +108,7 @@ export function loadResearchNoteDraftStore(storage = globalThis.localStorage) {
   }
 }
 
-export function saveResearchNoteDraftStore(drafts, storage = globalThis.localStorage) {
+export function saveResearchNoteDraftStore(drafts, storage = getAppStorage()) {
   if (!storage) throw new Error("当前浏览器不支持本地存储。");
   storage.setItem(
     NOTE_DRAFT_STORAGE_KEY,
@@ -189,7 +190,7 @@ export function deleteResearchNoteHistoriesForProject(histories = [], projectId 
   return histories.filter((item) => item.projectId !== projectId);
 }
 
-export function loadResearchNoteHistoryStore(storage = globalThis.localStorage) {
+export function loadResearchNoteHistoryStore(storage = getAppStorage()) {
   if (!storage) return { histories: [], error: null };
   const raw = storage.getItem(NOTE_HISTORY_STORAGE_KEY);
   if (!raw) return { histories: [], error: null };
@@ -224,7 +225,7 @@ export function serializeResearchNoteHistory(snapshot) {
   };
 }
 
-export function saveResearchNoteHistoryStore(histories, storage = globalThis.localStorage) {
+export function saveResearchNoteHistoryStore(histories, storage = getAppStorage()) {
   if (!storage) throw new Error("当前浏览器不支持本地存储。");
   storage.setItem(
     NOTE_HISTORY_STORAGE_KEY,

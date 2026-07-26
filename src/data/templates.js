@@ -1,4 +1,5 @@
 import { EMPTY_PROJECT_DRAFT, projectToDraft } from "./projects.js";
+import { getAppStorage } from "./filePersistence.js";
 
 export const TEMPLATE_SCHEMA_VERSION = 1;
 export const TEMPLATE_STORAGE_KEY = "agent-project-showcase.templates.v1";
@@ -452,7 +453,7 @@ export function resolveImportedTemplateConflicts(imported = [], existing = [], m
   return result;
 }
 
-export function loadTemplateStore(storage = globalThis.localStorage) {
+export function loadTemplateStore(storage = getAppStorage()) {
   if (!storage) return { templates: [], error: null };
   const raw = storage.getItem(TEMPLATE_STORAGE_KEY);
   if (!raw) return { templates: [], error: null };
@@ -473,7 +474,7 @@ export function loadTemplateStore(storage = globalThis.localStorage) {
   }
 }
 
-export function saveTemplateStore(templates, storage = globalThis.localStorage) {
+export function saveTemplateStore(templates, storage = getAppStorage()) {
   if (!storage) throw new Error("当前浏览器不支持本地存储。");
   const normalized = templates.map(normalizeCustomTemplate);
   storage.setItem(

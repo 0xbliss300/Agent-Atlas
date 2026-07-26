@@ -1,3 +1,5 @@
+import { getAppStorage } from "./filePersistence.js";
+
 export const RESEARCH_NOTE_SCHEMA_VERSION = 1;
 export const RESEARCH_NOTE_STORAGE_KEY = "agent-project-showcase.research-notes.v1";
 
@@ -161,7 +163,7 @@ export function getResearchNoteExcerpt(body = "", maximumLength = 150) {
   return plain.length > maximumLength ? `${plain.slice(0, maximumLength).trim()}…` : plain;
 }
 
-export function loadResearchNoteStore(storage = globalThis.localStorage) {
+export function loadResearchNoteStore(storage = getAppStorage()) {
   if (!storage) return { notes: [], error: null };
   const raw = storage.getItem(RESEARCH_NOTE_STORAGE_KEY);
   if (!raw) return { notes: [], error: null };
@@ -180,7 +182,7 @@ export function loadResearchNoteStore(storage = globalThis.localStorage) {
   }
 }
 
-export function saveResearchNoteStore(notes, storage = globalThis.localStorage) {
+export function saveResearchNoteStore(notes, storage = getAppStorage()) {
   if (!storage) throw new Error("当前浏览器不支持本地存储。");
   storage.setItem(
     RESEARCH_NOTE_STORAGE_KEY,

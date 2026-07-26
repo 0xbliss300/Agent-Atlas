@@ -21,8 +21,9 @@ Agent Atlas 是一个仅在本机运行的个人 AI Agent 项目工作台。它�
 
 项目坚持 **local-first**：
 
-- 不需要账号、后端、数据库或环境变量；
-- 业务数据保存在当前浏览器的版本化本地存储中；
+- 不需要账号、远程后端、数据库或环境变量；
+- 可变业务数据分类保存在项目根目录的 `data/` 中；
+- 仅监听 `127.0.0.1` 的本地文件层负责校验和原子写入；
 - 不提供云同步、遥测或远程 Markdown 渲染；
 - 读取文件和目录前必须由用户明确授权；
 - 不扫描未选择的路径，也不持久化目录句柄；
@@ -65,12 +66,13 @@ Agent Atlas 是一个仅在本机运行的个人 AI Agent 项目工作台。它�
 - Vite 6
 - React Markdown + remark-gfm
 - Phosphor Icons
+- Vite 本地文件持久化中间件
 - Noto Sans SC / Noto Serif SC / IBM Plex Mono
 - Node.js Test Runner
 - Vitest + React Testing Library + jsdom
 - ESLint + Prettier
 
-应用没有服务端运行时依赖。构建产物是静态前端；源代码可以在 GitHub 开放协作，但应用本身仍坚持本地运行，不提供托管实例，也不会上传用户数据。
+应用没有远程服务依赖。开发与本地预览命令会启动一个仅绑定 `127.0.0.1` 的受限文件接口，用于读写项目根目录的 `data/`；源代码可以在 GitHub 开放协作，但应用本身不提供托管实例，也不会上传用户数据。
 
 ## GitHub 与开源协作
 
@@ -85,7 +87,7 @@ Agent Atlas 是一个仅在本机运行的个人 AI Agent 项目工作台。它�
 - 推荐 Node.js **22.12+**
 - 最低兼容 Node.js **20.18+**
 - npm 10 或更高版本
-- 支持 `localStorage`、Hash 路由和现代 JavaScript 的浏览器
+- 支持 Hash 路由和现代 JavaScript 的浏览器
 - 如需选择项目目录，建议使用支持 File System Access API 的 Chromium 浏览器
 
 确认环境：
@@ -108,7 +110,7 @@ npm run dev
 http://localhost:5173/
 ```
 
-项目不需要 `.env`、数据库或外部 API。已有依赖时可直接执行 `npm run dev`。
+项目不需要 `.env`、数据库或外部 API。必须通过 `npm run dev` 或 `npm run preview` 启动，不能直接双击 `dist/index.html`，因为分类数据由同源的本地文件接口提供。
 
 ## 页面路由
 
@@ -175,7 +177,7 @@ Agent Atlas 使用 Hash 路由，刷新、前进和后退不需要服务器重�
 - 移动端可切换编辑/预览；
 - 支持 GFM 表格、任务列表、引用和代码块；
 - 原始 HTML、脚本、危险 URL 与远程图片不会执行；
-- 未保存内容进入本地草稿；
+- 未保存内容进入 `data/drafts/` 中的本地草稿；
 - 每篇正式笔记保留最近 10 个历史版本。
 
 ### 5. 备份数据
@@ -222,21 +224,32 @@ Agent Atlas 使用 Hash 路由，刷新、前进和后退不需要服务器重�
 
 读取结果会先生成预览或可编辑草稿，不会直接修改数据。Agent Atlas 不保存文件内容、目录句柄和权限，也不会根据文本路径自动访问文件系统。
 
-## 本地存储说明
+## `data/` 分类存储
 
-浏览器的 `localStorage` 按“浏览器 + 用户配置 + 站点来源”隔离。以下情况可能看到另一份空数据：
+应用启动时先读取项目根目录的 `data/`，再渲染页面。数据按职责分开保存：
 
-- 更换浏览器或浏览器配置；
-- 更换端口或主机名；
-- 使用隐私模式；
-- 清除站点数据。
+| 目录 | 内容 |
+| --- | --- |
+| `data/meta/` | 文件格式版本和旧数据迁移记录 |
+| `data/projects/` | 项目、任务、阻塞、技术信息和标签关联 |
+| `data/research-notes/` | 正式研究笔记 |
+| `data/drafts/` | 未正式保存的笔记草稿 |
+| `data/history/` | 最近 10 个笔记版本 |
+| `data/events/` | 项目自动变更时间线 |
+| `data/templates/` | 用户自定义模板 |
+| `data/organization/` | 项目集合 |
+| `data/settings/` | 显示、排序和密度偏好 |
 
-浏览器不会自动创建磁盘备份。项目路径、日志、仓库地址和研究内容可能包含私人信息，导出的 JSON 与 Markdown 也应作为本地私密文件保管。
+所有文件都有独立 schema，写入采用临时文件加原子替换。接口只接受预定义分类，不接受绝对路径或任意文件名。读取到损坏文件时会保留原件并在页面底部显示错误，不会静默覆盖。
+
+首次升级时，应用会把缺失分类的旧版 `localStorage` 数据复制到 `data/`；文件数据优先，迁移可重复执行，验证成功后浏览器旧数据仍会保留作为迁移保险。真实 `data/` 内容默认被 Git 忽略，只提交 [`data/README.md`](data/README.md)。
 
 ## 项目结构
 
 ```text
 agent-project-showcase/
+├─ data/                  # 私有运行数据；按类别分目录，内容默认不提交 Git
+│  └─ README.md           # 可提交的目录说明
 ├─ public/
 │  ├─ agent-atlas-icon.png
 │  └─ agent-atlas-icon-source.png
@@ -250,6 +263,8 @@ agent-project-showcase/
 │  ├─ App.jsx            # 状态编排与页面组合
 │  ├─ routing.js         # Hash 路由解析与页面标题
 │  └─ styles.css         # 设计系统与响应式样式
+├─ scripts/
+│  └─ dataPersistencePlugin.mjs # 受限本地文件 API 与原子写入
 ├─ AGENTS.md             # 持久设计和开发约束
 ├─ PROJECT_TODO.md       # 任务、进度和验收记录
 └─ README.md
@@ -273,7 +288,7 @@ npm run check
 
 当前质量基线：
 
-- 89 项 Node 单元测试；
+- 98 项 Node 单元测试；
 - 41 项组件测试；
 - Vite 生产构建通过。
 
@@ -298,9 +313,11 @@ Agent Atlas 延续轻量编辑索引风格：
 ## 安全与发布约束
 
 - 不上传项目或研究数据；
+- `data/` 中的真实运行数据默认不进入 Git；
 - 不添加遥测、远程同步或云数据库；
 - 不执行 Markdown 原始 HTML；
 - 不自动扫描本地文件；
+- 文件持久化接口只绑定 `127.0.0.1` 且不能写出 `data/`；
 - 不把指南或图标写入业务备份；
 - 可以公开源代码，但不要把应用部署为承载个人项目数据的公开服务。
 

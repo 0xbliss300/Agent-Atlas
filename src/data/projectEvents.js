@@ -1,3 +1,5 @@
+import { getAppStorage } from "./filePersistence.js";
+
 export const PROJECT_EVENT_SCHEMA_VERSION = 1;
 export const PROJECT_EVENT_STORAGE_KEY = "agent-project-showcase.project-events.v1";
 export const PROJECT_EVENT_LIMIT = 200;
@@ -312,7 +314,7 @@ export function serializeProjectEvent(event) {
   };
 }
 
-export function loadProjectEventStore(storage = globalThis.localStorage) {
+export function loadProjectEventStore(storage = getAppStorage()) {
   if (!storage) return { events: [], error: null };
   const raw = storage.getItem(PROJECT_EVENT_STORAGE_KEY);
   if (!raw) return { events: [], error: null };
@@ -330,7 +332,7 @@ export function loadProjectEventStore(storage = globalThis.localStorage) {
   }
 }
 
-export function saveProjectEventStore(events, storage = globalThis.localStorage) {
+export function saveProjectEventStore(events, storage = getAppStorage()) {
   if (!storage) throw new Error("当前浏览器不支持本地存储。");
   storage.setItem(
     PROJECT_EVENT_STORAGE_KEY,

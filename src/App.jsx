@@ -89,6 +89,8 @@ import {
   sortCollections,
 } from "./data/organization.js";
 import { useRoute } from "./hooks/useRoute.js";
+import { useFilePersistenceStatus } from "./hooks/useFilePersistenceStatus.js";
+import { retryFilePersistence } from "./data/filePersistence.js";
 import { NotFoundPage } from "./pages/NotFoundPage.jsx";
 import { OverviewPage } from "./pages/OverviewPage.jsx";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage.jsx";
@@ -105,6 +107,7 @@ const ResearchNotePage = lazy(() =>
 
 export function App() {
   const [path, navigate] = useRoute();
+  const persistenceStatus = useFilePersistenceStatus();
   const [storeState, setStoreState] = useState(() => loadProjectStore());
   const [noteStoreState, setNoteStoreState] = useState(() => loadResearchNoteStore());
   const [noteDraftState, setNoteDraftState] = useState(() => loadResearchNoteDraftStore());
@@ -1010,7 +1013,21 @@ export function App() {
         <footer className="site-footer">
           <div className="footer-meta">
             <span>LOCAL-FIRST · PRIVATE · VERSION 1.0.0</span>
-            <span>DATA STORED LOCALLY</span>
+            <div
+              className={`persistence-status persistence-${persistenceStatus.phase}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span>
+                <strong>DATA · PROJECT /data</strong>
+                <small>{persistenceStatus.message}</small>
+              </span>
+              {persistenceStatus.mode === "file" && persistenceStatus.phase === "error" ? (
+                <button type="button" onClick={retryFilePersistence}>
+                  重试保存
+                </button>
+              ) : null}
+            </div>
           </div>
           <a
             className="github-link"

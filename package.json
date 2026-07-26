@@ -11,11 +11,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "npm run test:unit && npm run test:components",
-    "test:unit": "node --test src/data/backup.test.js src/data/codexContext.test.js src/data/guide.test.js src/data/localStatus.test.js src/data/noteWorkspace.test.js src/data/organization.test.js src/data/projectEvents.test.js src/data/projectImport.test.js src/data/projects.test.js src/data/researchNotes.test.js src/data/settings.test.js src/data/templates.test.js src/data/workbench.test.js src/routing.test.js",
+    "test:unit": "node --test scripts/dataPersistencePlugin.test.mjs src/data/backup.test.js src/data/codexContext.test.js src/data/filePersistence.test.js src/data/guide.test.js src/data/localStatus.test.js src/data/noteWorkspace.test.js src/data/organization.test.js src/data/projectEvents.test.js src/data/projectImport.test.js src/data/projects.test.js src/data/researchNotes.test.js src/data/settings.test.js src/data/templates.test.js src/data/workbench.test.js src/routing.test.js",
     "test:components": "vitest run --config vitest.config.mjs",
-    "lint": "eslint src vite.config.mjs",
-    "format": "prettier --write src vite.config.mjs vitest.config.mjs eslint.config.js package.json",
-    "format:check": "prettier --check src vite.config.mjs vitest.config.mjs eslint.config.js package.json",
+    "lint": "eslint src scripts vite.config.mjs",
+    "format": "prettier --write src scripts vite.config.mjs vitest.config.mjs eslint.config.js package.json",
+    "format:check": "prettier --check src scripts vite.config.mjs vitest.config.mjs eslint.config.js package.json",
     "check": "npm run lint && npm run format:check && npm test && npm run build"
   },
   "dependencies": {

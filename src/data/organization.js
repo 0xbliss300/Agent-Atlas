@@ -1,3 +1,5 @@
+import { getAppStorage } from "./filePersistence.js";
+
 export const COLLECTION_SCHEMA_VERSION = 1;
 export const COLLECTION_STORAGE_KEY = "agent-project-showcase.collections.v1";
 export const MAX_PROJECT_TAGS = 12;
@@ -203,7 +205,7 @@ export function importCollections(imported = [], existing = [], mode = "merge") 
   return { collections: result, idMap, importedCount: imported.length };
 }
 
-export function loadCollectionStore(storage = globalThis.localStorage) {
+export function loadCollectionStore(storage = getAppStorage()) {
   if (!storage) return { collections: [], error: null };
   const raw = storage.getItem(COLLECTION_STORAGE_KEY);
   if (!raw) return { collections: [], error: null };
@@ -225,7 +227,7 @@ export function loadCollectionStore(storage = globalThis.localStorage) {
   }
 }
 
-export function saveCollectionStore(collections, storage = globalThis.localStorage) {
+export function saveCollectionStore(collections, storage = getAppStorage()) {
   if (!storage) throw new Error("当前浏览器不支持本地存储。");
   const normalized = sortCollections(collections.map(normalizeCollection)).map(
     (collection, order) => ({ ...collection, order }),

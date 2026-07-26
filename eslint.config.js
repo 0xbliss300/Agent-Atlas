@@ -43,4 +43,14 @@ export default [
       "react/jsx-uses-vars": "error",
     },
   },
+  {
+    files: ["scripts/**/*.mjs", "vite.config.mjs"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        URL: "readonly",
+        process: "readonly",
+      },
+    },
+  },
 ];

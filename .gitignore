@@ -46,10 +46,13 @@ artifacts/
 playwright-report/
 test-results/
 
+# Private runtime data (keep only the directory documentation)
+data/*
+!data/README.md
+
 # Local-only machine configuration
 .npmrc
 .nvmrc
 .prettierignore
 PROJECT_TODO.md
 AGENTS.md
-

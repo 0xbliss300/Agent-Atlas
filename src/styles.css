@@ -207,8 +207,52 @@ main {
 .footer-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
+  align-items: flex-start;
+  gap: 8px 22px;
   padding-top: 4px;
+}
+
+.persistence-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  letter-spacing: 0.02em;
+}
+
+.persistence-status > span {
+  display: grid;
+  gap: 2px;
+}
+
+.persistence-status strong,
+.persistence-status small {
+  font: inherit;
+}
+
+.persistence-status strong {
+  color: var(--blue);
+  font-weight: 600;
+}
+
+.persistence-status small {
+  max-width: 390px;
+  color: #71716b;
+  letter-spacing: 0;
+}
+
+.persistence-error strong,
+.persistence-error small {
+  color: var(--danger);
+}
+
+.persistence-status button {
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  background: transparent;
+  padding: 0;
+  color: var(--danger);
+  font: inherit;
+  cursor: pointer;
 }
 
 .github-link {
@@ -4633,6 +4677,10 @@ main {
   .footer-meta {
     flex-direction: column;
     gap: 5px;
+  }
+
+  .persistence-status {
+    margin-top: 3px;
   }
 
   .detail-hero {

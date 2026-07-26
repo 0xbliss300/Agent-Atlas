@@ -1,3 +1,5 @@
+import { getAppStorage } from "./filePersistence.js";
+
 export const SETTINGS_SCHEMA_VERSION = 1;
 export const SETTINGS_STORAGE_KEY = "agent-project-showcase.settings.v1";
 
@@ -34,7 +36,7 @@ export function normalizeSettings(value = {}) {
   };
 }
 
-export function loadSettings(storage = globalThis.localStorage) {
+export function loadSettings(storage = getAppStorage()) {
   if (!storage) return { settings: { ...DEFAULT_SETTINGS }, error: null };
   try {
     const raw = storage.getItem(SETTINGS_STORAGE_KEY);
@@ -48,7 +50,7 @@ export function loadSettings(storage = globalThis.localStorage) {
   }
 }
 
-export function saveSettings(settings, storage = globalThis.localStorage) {
+export function saveSettings(settings, storage = getAppStorage()) {
   if (!storage) throw new Error("当前浏览器不支持本地设置存储。");
   const normalized = normalizeSettings(settings);
   storage.setItem(
