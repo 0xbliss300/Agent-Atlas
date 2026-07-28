@@ -1,5 +1,12 @@
 import { useRef, useState } from "react";
-import { ArrowRight, DownloadSimple, Trash, UploadSimple } from "@phosphor-icons/react";
+import {
+  ArrowRight,
+  DownloadSimple,
+  Recycle,
+  Sparkle,
+  Trash,
+  UploadSimple,
+} from "@phosphor-icons/react";
 import { useDialogFocus } from "../hooks/useDialogFocus.js";
 import { CollectionManager } from "./CollectionManager.jsx";
 
@@ -18,10 +25,13 @@ export function SettingsPanel({
   onExport,
   onImport,
   onReset,
+  onRestartOnboarding,
   onCreateCollection,
   onRenameCollection,
   onMoveCollection,
   onDeleteCollection,
+  onOpenTrash,
+  trashCount = 0,
 }) {
   const panelRef = useRef(null);
   const closeRef = useRef(null);
@@ -119,6 +129,14 @@ export function SettingsPanel({
               onChange={(event) => onSettingsChange({ showRecent: event.target.checked })}
             />
           </label>
+          <label className="toggle-setting">
+            <span>键盘快捷键与命令面板</span>
+            <input
+              type="checkbox"
+              checked={settings.enableShortcuts}
+              onChange={(event) => onSettingsChange({ enableShortcuts: event.target.checked })}
+            />
+          </label>
           <label className="select-setting">
             <span>默认排序</span>
             <select
@@ -140,6 +158,29 @@ export function SettingsPanel({
               <option value="compact">紧凑</option>
             </select>
           </label>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onRestartOnboarding}
+            disabled={settings.onboardingState === "pending"}
+          >
+            <Sparkle size={18} />
+            重新启动首次使用引导
+          </button>
+        </section>
+
+        <section className="display-settings" aria-labelledby="trash-settings-title">
+          <h3 id="trash-settings-title">回收站</h3>
+          <p>已删除的项目和研究笔记会暂存 7 天，期间可以一键恢复关联内容。</p>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onOpenTrash}
+            disabled={trashCount === 0}
+          >
+            <Recycle size={18} />
+            打开回收站{trashCount > 0 ? `（${trashCount} 条）` : ""}
+          </button>
         </section>
 
         <CollectionManager

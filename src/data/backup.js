@@ -27,6 +27,7 @@ import {
   importCollections,
   normalizeCollection,
 } from "./organization.js";
+import { normalizeTrashEntry, serializeTrashEntry, TRASH_SCHEMA_VERSION } from "./trash.js";
 
 export function createAppBackup(
   projects = [],
@@ -35,6 +36,7 @@ export function createAppBackup(
   events = [],
   templates = [],
   collections = [],
+  trashEntries = [],
 ) {
   const payload = JSON.parse(createProjectBackup(projects));
   return JSON.stringify(
@@ -50,6 +52,42 @@ export function createAppBackup(
       templates: templates.map(normalizeCustomTemplate),
       collectionSchemaVersion: COLLECTION_SCHEMA_VERSION,
       collections: collections.map(normalizeCollection),
+      trashSchemaVersion: TRASH_SCHEMA_VERSION,
+      trash: trashEntries.map(serializeTrashEntry),
+    },
+    null,
+    2,
+  );
+}
+
+export function createSingleProjectBackup(
+  project,
+  notes = [],
+  histories = [],
+  events = [],
+  collections = [],
+) {
+  const payload = JSON.parse(createProjectBackup([project]));
+  const projectNotes = notes.filter((note) => note.projectId === project.id);
+  const projectNoteIds = new Set(projectNotes.map((note) => note.id));
+  const projectHistories = histories.filter((snapshot) => projectNoteIds.has(snapshot.noteId));
+  const projectEvents = events.filter((event) => event.projectId === project.id);
+  const projectCollectionIds = new Set(project.collectionIds ?? []);
+  const projectCollections = collections.filter((collection) =>
+    projectCollectionIds.has(collection.id),
+  );
+
+  return JSON.stringify(
+    {
+      ...payload,
+      researchNoteSchemaVersion: RESEARCH_NOTE_SCHEMA_VERSION,
+      researchNotes: projectNotes,
+      researchNoteHistorySchemaVersion: NOTE_HISTORY_SCHEMA_VERSION,
+      researchNoteHistories: projectHistories.map(serializeResearchNoteHistory),
+      projectEventSchemaVersion: PROJECT_EVENT_SCHEMA_VERSION,
+      projectEvents: projectEvents.map(serializeProjectEvent),
+      collectionSchemaVersion: COLLECTION_SCHEMA_VERSION,
+      collections: projectCollections.map(normalizeCollection),
     },
     null,
     2,
@@ -100,6 +138,7 @@ export function importAppBackup(
   existingEvents = [],
   existingTemplates = [],
   existingCollections = [],
+  existingTrash = [],
 ) {
   const payload = parsePayload(raw);
   const projectResult = importProjectBackup(payload, existingProjects, mode);
@@ -108,6 +147,15 @@ export function importAppBackup(
   const hasEvents = Object.hasOwn(payload ?? {}, "projectEvents");
   const hasTemplates = Object.hasOwn(payload ?? {}, "templates");
   const hasCollections = Object.hasOwn(payload ?? {}, "collections");
+  const hasTrash = Object.hasOwn(payload ?? {}, "trash");
+
+  if (
+    hasTrash &&
+    (payload.trashSchemaVersion !== TRASH_SCHEMA_VERSION || !Array.isArray(payload.trash))
+  ) {
+    throw new Error("回收站备份版本或结构不受支持。");
+  }
+  const trash = hasTrash ? payload.trash.map(normalizeTrashEntry) : existingTrash;
 
   if (
     hasCollections &&
@@ -137,6 +185,15 @@ export function importAppBackup(
     });
   });
 
+  const projectIdMap = { ...projectResult.idMap };
+  if (mode === "merge") {
+    existingProjects.forEach((project) => {
+      if (!Object.hasOwn(projectIdMap, project.id)) {
+        projectIdMap[project.id] = project.id;
+      }
+    });
+  }
+
   if (
     hasResearchNotes &&
     (payload.researchNoteSchemaVersion !== RESEARCH_NOTE_SCHEMA_VERSION ||
@@ -151,7 +208,7 @@ export function importAppBackup(
   importedNotes.forEach((note) => {
     if (importedNoteIds.has(note.id)) throw new Error(`备份中存在重复研究笔记 ID：${note.id}`);
     importedNoteIds.add(note.id);
-    if (!projectResult.idMap[note.projectId]) {
+    if (!projectIdMap[note.projectId]) {
       throw new Error(`研究笔记“${note.title}”关联的项目不存在。`);
     }
   });
@@ -190,7 +247,7 @@ export function importAppBackup(
       throw new Error(`备份中存在重复项目变更事件 ID：${event.id}`);
     }
     importedEventIds.add(event.id);
-    if (!projectResult.idMap[event.projectId]) {
+    if (!projectIdMap[event.projectId]) {
       throw new Error(`项目变更事件“${event.summary}”关联的项目不存在。`);
     }
   });
@@ -220,7 +277,7 @@ export function importAppBackup(
   const noteIdMap = {};
   let reassignedNoteIds = 0;
   importedNotes.forEach((note) => {
-    const projectId = projectResult.idMap[note.projectId];
+    const projectId = projectIdMap[note.projectId];
     if (notes.some((current) => current.id === note.id)) {
       const generated = createResearchNoteRecord(
         { projectId, title: note.title, body: note.body },
@@ -252,7 +309,7 @@ export function importAppBackup(
         ...snapshot,
         id,
         noteId: noteIdMap[snapshot.noteId],
-        projectId: projectResult.idMap[snapshot.projectId],
+        projectId: projectIdMap[snapshot.projectId],
       }),
     );
   });
@@ -269,7 +326,7 @@ export function importAppBackup(
     const normalized = normalizeProjectEvent({
       ...event,
       id,
-      projectId: projectResult.idMap[event.projectId],
+      projectId: projectIdMap[event.projectId],
       subject: event.subject
         ? {
             ...event.subject,
@@ -287,6 +344,8 @@ export function importAppBackup(
     events,
     templates: resolveImportedTemplateConflicts(importedTemplates, existingTemplates, mode),
     collections: collectionResult.collections,
+    trash,
+    noteIdMap,
     importedNotesCount: importedNotes.length,
     importedEventsCount: importedEvents.length,
     importedTemplatesCount: importedTemplates.length,

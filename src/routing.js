@@ -10,6 +10,7 @@ export function parseRoute(path) {
   if (normalized === "/workbench") return { type: "workbench", path: normalized };
   if (normalized === "/notes") return { type: "notes", path: normalized };
   if (normalized === "/guide") return { type: "guide", path: normalized };
+  if (normalized === "/trash") return { type: "trash", path: normalized };
   if (normalized === "/notes/new") return { type: "note-new", path: normalized };
   const noteNewMatch = normalized.match(/^\/notes\/new\/project\/([^/]+)$/);
   if (noteNewMatch) {
@@ -55,6 +56,7 @@ export function getPageTitle(route, project, note) {
   if (route.type === "workbench") return "开发工作台 · Agent Atlas";
   if (route.type === "notes") return "研究笔记 · Agent Atlas";
   if (route.type === "guide") return "项目使用指南 · Agent Atlas";
+  if (route.type === "trash") return "回收站 · Agent Atlas";
   if (route.type === "note-new") return "新建研究笔记 · Agent Atlas";
   if (route.type === "note" && note) return `${note.title} · 研究笔记`;
   if ((route.type === "project" || route.type === "project-notes") && project) {

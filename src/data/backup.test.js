@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAppBackup, importAppBackup } from "./backup.js";
+import { createAppBackup, createSingleProjectBackup, importAppBackup } from "./backup.js";
 import { createProjectBackup, createProjectRecord, EMPTY_PROJECT_DRAFT } from "./projects.js";
 import { createResearchNoteRecord } from "./researchNotes.js";
 import { addResearchNoteHistorySnapshot, NOTE_HISTORY_SCHEMA_VERSION } from "./noteWorkspace.js";
@@ -176,4 +176,110 @@ test("旧版含笔记但不含历史的备份安全迁移为空历史", () => {
   assert.equal(restored.notes.length, 1);
   assert.deepEqual(restored.histories, []);
   assert.deepEqual(restored.events, []);
+});
+
+test("单项目导出仅包含该项目及其关联笔记、历史、事件与集合", () => {
+  const projectA = createProjectRecord(projectDraft("项目 A"), []);
+  const projectB = createProjectRecord(projectDraft("项目 B"), [projectA]);
+  const collection = createCollection("重点项目");
+  const organizedA = { ...projectA, collectionIds: [collection.id] };
+  const noteA = createResearchNoteRecord(
+    { projectId: projectA.id, title: "A 笔记", body: "A 内容" },
+    [],
+    [organizedA],
+  );
+  const noteB = createResearchNoteRecord(
+    { projectId: projectB.id, title: "B 笔记", body: "B 内容" },
+    [],
+    [projectB],
+  );
+  const historiesA = addResearchNoteHistorySnapshot(noteA, []);
+  const historiesB = addResearchNoteHistorySnapshot(noteB, historiesA);
+  const eventsA = [
+    createProjectCreatedEvent(organizedA),
+    createResearchNoteEvent(noteA, "created"),
+  ];
+  const eventsB = [createProjectCreatedEvent(projectB), createResearchNoteEvent(noteB, "created")];
+
+  const payload = JSON.parse(
+    createSingleProjectBackup(
+      organizedA,
+      [noteA, noteB],
+      historiesB,
+      [...eventsA, ...eventsB],
+      [collection],
+    ),
+  );
+
+  assert.equal(payload.projects.length, 1);
+  assert.equal(payload.projects[0].id, organizedA.id);
+  assert.equal(payload.researchNotes.length, 1);
+  assert.equal(payload.researchNotes[0].id, noteA.id);
+  assert.equal(payload.researchNoteHistories.length, 1);
+  assert.equal(payload.researchNoteHistories[0].noteId, noteA.id);
+  assert.equal(payload.projectEvents.length, 2);
+  assert.ok(payload.projectEvents.every((event) => event.projectId === organizedA.id));
+  assert.equal(payload.collections.length, 1);
+  assert.equal(payload.collections[0].id, collection.id);
+});
+
+test("单项目导出在关联集合缺失时仍保留项目主体并清理无效集合关联", () => {
+  const project = createProjectRecord(projectDraft(), []);
+  const organized = { ...project, collectionIds: ["missing-collection"] };
+  const payload = JSON.parse(createSingleProjectBackup(organized, [], [], [], []));
+  assert.equal(payload.projects[0].collectionIds[0], "missing-collection");
+  assert.deepEqual(payload.collections, []);
+  const restored = importAppBackup(payload, [], [], "replace");
+  assert.deepEqual(restored.projects[0].collectionIds, []);
+});
+
+test("单项目备份可合并导入，项目 ID 冲突时重映射并保持笔记关联", () => {
+  const project = createProjectRecord(projectDraft(), []);
+  const collection = createCollection("核心集合");
+  const organized = { ...project, collectionIds: [collection.id] };
+  const note = createResearchNoteRecord(
+    { projectId: project.id, title: "核心笔记", body: "核心内容" },
+    [],
+    [organized],
+  );
+  const histories = addResearchNoteHistorySnapshot(note, []);
+  const events = [createProjectCreatedEvent(organized), createResearchNoteEvent(note, "created")];
+  const payload = JSON.parse(
+    createSingleProjectBackup(organized, [note], histories, events, [collection]),
+  );
+
+  const merged = importAppBackup(
+    payload,
+    [organized],
+    [note],
+    "merge",
+    histories,
+    events,
+    [],
+    [collection],
+  );
+
+  assert.equal(merged.projects.length, 2);
+  assert.equal(merged.importedCount, 1);
+  const importedProject = merged.projects.find((item) => item.id !== organized.id);
+  const importedNote = merged.notes.find((item) => item.id !== note.id);
+  assert.ok(importedProject);
+  assert.ok(importedNote);
+  assert.equal(importedNote.projectId, importedProject.id);
+  assert.ok(
+    merged.histories.some(
+      (snapshot) =>
+        snapshot.noteId === importedNote.id && snapshot.projectId === importedProject.id,
+    ),
+  );
+  assert.ok(
+    merged.events.some(
+      (event) =>
+        event.projectId === importedProject.id &&
+        event.subject?.kind === "note" &&
+        event.subject.id === importedNote.id,
+    ),
+  );
+  assert.equal(merged.collections.length, 2);
+  assert.ok(merged.collections.some((item) => item.name === "核心集合（导入）"));
 });

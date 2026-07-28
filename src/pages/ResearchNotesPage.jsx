@@ -1,5 +1,6 @@
 import { ArrowRight, FolderOpen, NotePencil, Plus } from "@phosphor-icons/react";
 import { getResearchNoteExcerpt } from "../data/researchNotes.js";
+import { OnboardingTip } from "../components/OnboardingTip.jsx";
 
 function NotesEmptyState({ projects, onAddProject, onNewNote, disabled }) {
   const hasProjects = projects.length > 0;
@@ -38,6 +39,8 @@ export function ResearchNotesPage({
   onNewNote,
   navigate,
   storeError,
+  onboardingActive = false,
+  onSkipOnboarding = () => {},
 }) {
   const sourceCount = new Set(researchNotes.map((note) => note.projectId)).size;
   const latest = researchNotes[0];
@@ -83,6 +86,15 @@ export function ResearchNotesPage({
           </div>
         </dl>
       </section>
+
+      {onboardingActive ? (
+        <OnboardingTip
+          title="首次使用研究笔记"
+          body="研究笔记按项目沉淀 Markdown 文档。先回到概览创建第一个项目，再为它撰写笔记。"
+          onStart={() => navigate("/")}
+          onSkip={onSkipOnboarding}
+        />
+      ) : null}
 
       {researchNotes.length ? (
         <section className="notes-index" aria-labelledby="notes-index-title">

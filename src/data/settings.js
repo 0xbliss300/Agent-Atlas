@@ -2,16 +2,24 @@ import { getAppStorage } from "./filePersistence.js";
 
 export const SETTINGS_SCHEMA_VERSION = 1;
 export const SETTINGS_STORAGE_KEY = "agent-project-showcase.settings.v1";
+export const ONBOARDING_STATES = Object.freeze({
+  PENDING: "pending",
+  COMPLETED: "completed",
+  SKIPPED: "skipped",
+});
 
 export const DEFAULT_SETTINGS = Object.freeze({
   showCompleted: true,
   sortBy: "updated",
   density: "standard",
   showRecent: true,
+  enableShortcuts: true,
+  onboardingState: ONBOARDING_STATES.PENDING,
 });
 
 const VALID_SORTS = new Set(["updated", "progress", "status"]);
 const VALID_DENSITIES = new Set(["standard", "compact"]);
+const VALID_ONBOARDING_STATES = new Set(Object.values(ONBOARDING_STATES));
 const STATUS_ORDER = Object.freeze({ active: 0, planning: 1, paused: 2, done: 3 });
 const VALID_STATUS_FILTERS = new Set(["all", ...Object.keys(STATUS_ORDER)]);
 
@@ -33,6 +41,13 @@ export function normalizeSettings(value = {}) {
     density: VALID_DENSITIES.has(value.density) ? value.density : DEFAULT_SETTINGS.density,
     showRecent:
       typeof value.showRecent === "boolean" ? value.showRecent : DEFAULT_SETTINGS.showRecent,
+    enableShortcuts:
+      typeof value.enableShortcuts === "boolean"
+        ? value.enableShortcuts
+        : DEFAULT_SETTINGS.enableShortcuts,
+    onboardingState: VALID_ONBOARDING_STATES.has(value.onboardingState)
+      ? value.onboardingState
+      : DEFAULT_SETTINGS.onboardingState,
   };
 }
 

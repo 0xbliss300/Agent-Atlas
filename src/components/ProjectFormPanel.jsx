@@ -8,6 +8,7 @@ import {
 } from "../data/projects.js";
 import { IMPORT_FIELD_STATUS } from "../data/projectImport.js";
 import { useDialogFocus } from "../hooks/useDialogFocus.js";
+import { useConfirmDialog } from "./ConfirmDialog.jsx";
 import { ProjectImportSource } from "./ProjectImportSource.jsx";
 import { TemplateWorkspace } from "./TemplateWorkspace.jsx";
 
@@ -161,8 +162,17 @@ export function ProjectFormPanel({
     }));
   };
 
-  const requestClose = () => {
-    if (dirty && !window.confirm("尚有未保存内容，确定关闭吗？")) return;
+  const confirmDialog = useConfirmDialog();
+  const requestClose = async () => {
+    if (dirty) {
+      const ok = await confirmDialog({
+        title: "关闭表单",
+        message: "尚有未保存内容，确定关闭吗？",
+        confirmText: "关闭",
+        danger: false,
+      });
+      if (!ok) return;
+    }
     onClose();
   };
   useDialogFocus(panelRef, nameRef, requestClose);

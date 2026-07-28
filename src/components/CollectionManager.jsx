@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, FolderPlus, PencilSimple, Trash } from "@phosphor-icons/react";
 import { countProjectsInCollection } from "../data/organization.js";
+import { useConfirmDialog } from "./ConfirmDialog.jsx";
 
 export function CollectionManager({
   collections = [],
@@ -15,6 +16,7 @@ export function CollectionManager({
   const [editingId, setEditingId] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [feedback, setFeedback] = useState("");
+  const confirmDialog = useConfirmDialog();
 
   const run = (action, successMessage) => {
     const result = action();
@@ -143,11 +145,17 @@ export function CollectionManager({
                         type="button"
                         className="icon-button"
                         aria-label={`删除${collection.name}`}
-                        onClick={() => {
+                        onClick={async () => {
                           const message = projectCount
                             ? `集合“${collection.name}”包含 ${projectCount} 个项目。确定删除并解除这些关联吗？项目、研究笔记、任务和历史都不会被删除。`
                             : `确定删除空集合“${collection.name}”吗？`;
-                          if (window.confirm(message)) {
+                          const ok = await confirmDialog({
+                            title: projectCount ? "删除非空集合" : "删除空集合",
+                            message,
+                            confirmText: "删除",
+                            danger: true,
+                          });
+                          if (ok) {
                             run(
                               () => onDelete(collection.id),
                               "集合已删除，项目及研究内容未受影响。",

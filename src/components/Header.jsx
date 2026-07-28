@@ -1,6 +1,14 @@
-import { Plus } from "@phosphor-icons/react";
+import { MagnifyingGlass, Plus } from "@phosphor-icons/react";
 
-export function Header({ navigate, activeNav, settingsOpen, onSettings, onAdd, addDisabled }) {
+export function Header({
+  navigate,
+  activeNav,
+  settingsOpen,
+  onSettings,
+  onAdd,
+  addDisabled,
+  onOpenPalette,
+}) {
   return (
     <header className="site-header">
       <button className="brand" onClick={() => navigate("/")} aria-label="返回项目概览">
@@ -45,6 +53,16 @@ export function Header({ navigate, activeNav, settingsOpen, onSettings, onAdd, a
           onClick={onSettings}
         >
           设置
+        </button>
+        <button
+          className="nav-link header-cmd-trigger"
+          onClick={onOpenPalette}
+          type="button"
+          aria-label="打开命令面板（Ctrl 或 Cmd 加 K）"
+          title="命令面板（Ctrl/Cmd+K）"
+        >
+          <MagnifyingGlass size={16} weight="bold" aria-hidden="true" />
+          <span>命令</span>
         </button>
         <button className="nav-add" onClick={onAdd} disabled={addDisabled}>
           <Plus size={17} weight="bold" />

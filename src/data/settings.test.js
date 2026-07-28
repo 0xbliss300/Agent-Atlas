@@ -7,7 +7,6 @@ import {
   selectVisibleProjects,
   SETTINGS_STORAGE_KEY,
 } from "./settings.js";
-
 function storage(initial = null) {
   return {
     value: initial,
@@ -70,6 +69,17 @@ test("损坏设置安全恢复默认值", () => {
   const result = loadSettings(storage("{broken"));
   assert.deepEqual(result.settings, DEFAULT_SETTINGS);
   assert.ok(result.error);
+});
+
+test("引导状态默认为 pending 且可保存 completed/skipped", () => {
+  assert.equal(DEFAULT_SETTINGS.onboardingState, "pending");
+  const memory = storage();
+  saveSettings({ ...DEFAULT_SETTINGS, onboardingState: "skipped" }, memory);
+  assert.equal(loadSettings(memory).settings.onboardingState, "skipped");
+  saveSettings({ ...DEFAULT_SETTINGS, onboardingState: "completed" }, memory);
+  assert.equal(loadSettings(memory).settings.onboardingState, "completed");
+  saveSettings({ ...DEFAULT_SETTINGS, onboardingState: "invalid" }, memory);
+  assert.equal(loadSettings(memory).settings.onboardingState, "pending");
 });
 
 test("隐藏已完成项目并支持更新时间、完成度和状态排序", () => {

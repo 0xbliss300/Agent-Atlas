@@ -56,3 +56,7 @@ data/*
 .prettierignore
 PROJECT_TODO.md
 AGENTS.md
+
+# Agent Folder
+.workbuddy
+.trae

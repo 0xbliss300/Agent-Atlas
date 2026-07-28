@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Copy, FloppyDisk, PencilSimple, Trash } from "@phosphor-icons/react";
+import { useConfirmDialog } from "./ConfirmDialog.jsx";
 
 const PROJECT_EXTRA_OPTIONS = [
   {
@@ -36,6 +37,7 @@ export function TemplateWorkspace({
   const [editingId, setEditingId] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [feedback, setFeedback] = useState("");
+  const confirmDialog = useConfirmDialog();
   const customTemplates = useMemo(
     () => templates.filter((template) => !template.builtin),
     [templates],
@@ -275,12 +277,14 @@ export function TemplateWorkspace({
                         type="button"
                         className="icon-button"
                         aria-label={`删除${template.name}`}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `确定删除模板“${template.name}”吗？已创建的${typeLabel}不会受影响。`,
-                            )
-                          ) {
+                        onClick={async () => {
+                          const ok = await confirmDialog({
+                            title: "删除模板",
+                            message: `确定删除模板“${template.name}”吗？已创建的${typeLabel}不会受影响。`,
+                            confirmText: "删除",
+                            danger: true,
+                          });
+                          if (ok) {
                             run(() => onDelete?.(template.id), "模板已删除，已有内容未受影响。");
                           }
                         }}

@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react";
 import { MarkdownRenderer } from "../components/MarkdownRenderer.jsx";
 import { TemplateWorkspace } from "../components/TemplateWorkspace.jsx";
+import { useConfirmDialog } from "../components/ConfirmDialog.jsx";
 import { createNoteDraftDiff } from "../data/noteWorkspace.js";
 import { EMPTY_RESEARCH_NOTE_DRAFT } from "../data/researchNotes.js";
 
@@ -244,6 +245,7 @@ export function ResearchNotePage({
   const saveDraftRef = useRef(onSaveDraft);
   const deleteDraftRef = useRef(onDeleteDraft);
   const changedDraftKeysRef = useRef(new Set());
+  const confirmDialog = useConfirmDialog();
   saveDraftRef.current = onSaveDraft;
   deleteDraftRef.current = onDeleteDraft;
 
@@ -330,11 +332,17 @@ export function ResearchNotePage({
     setSubmitError(result.error ?? "研究笔记保存失败。");
   };
 
-  const leave = () => {
+  const leave = async () => {
     if (dirty && editing) {
       const result = saveDraftRef.current(draftKey, draft, note?.id ?? "");
-      if (!result.ok && !window.confirm("本地草稿保存失败，当前修改可能丢失。仍然离开吗？")) {
-        return;
+      if (!result.ok) {
+        const ok = await confirmDialog({
+          title: "放弃未保存的草稿",
+          message: "本地草稿保存失败，当前修改可能丢失。仍然离开吗？",
+          confirmText: "仍然离开",
+          danger: true,
+        });
+        if (!ok) return;
       }
     }
     navigate("/notes");

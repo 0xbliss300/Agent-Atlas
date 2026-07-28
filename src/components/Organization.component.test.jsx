@@ -1,7 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OverviewPage } from "../pages/OverviewPage.jsx";
 import { CollectionManager } from "./CollectionManager.jsx";
+
+// TODO-059: CollectionManager 通过 useConfirmDialog 替换 window.confirm，
+// 测试侧用 hoisted mock 模拟“用户确认”。
+const confirmMock = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
+vi.mock("./ConfirmDialog.jsx", () => ({
+  useConfirmDialog: () => confirmMock,
+}));
 
 const project = {
   id: "project-1",
@@ -72,9 +79,9 @@ describe("项目组织界面", () => {
     expect(onStatusFilterChange).toHaveBeenCalledWith("all");
   });
 
-  it("删除包含项目的集合先说明影响且只调用解除关联操作", () => {
+  it("删除包含项目的集合先说明影响且只调用解除关联操作", async () => {
     const onDelete = vi.fn(() => ({ ok: true }));
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    confirmMock.mockClear();
     render(
       <CollectionManager
         collections={[{ id: "collection-1", name: "当前重点", order: 0 }]}
@@ -87,10 +94,12 @@ describe("项目组织界面", () => {
     );
     expect(screen.getByText("1 个项目")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "删除当前重点" }));
-    expect(confirm).toHaveBeenCalledWith(
-      expect.stringMatching(/项目、研究笔记、任务和历史都不会被删除/),
+    expect(confirmMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringMatching(/项目、研究笔记、任务和历史都不会被删除/),
+      }),
     );
-    expect(onDelete).toHaveBeenCalledWith("collection-1");
+    await waitFor(() => expect(onDelete).toHaveBeenCalledWith("collection-1"));
     expect(screen.getByRole("status")).toHaveTextContent("项目及研究内容未受影响");
   });
 });

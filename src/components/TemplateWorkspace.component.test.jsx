@@ -1,11 +1,18 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { getBuiltinProjectTemplates } from "../data/templates.js";
 import { ProjectFormPanel } from "./ProjectFormPanel.jsx";
 import { TemplateWorkspace } from "./TemplateWorkspace.jsx";
 
+// TODO-059: ProjectFormPanel 与 TemplateWorkspace 均通过 useConfirmDialog 替换
+// window.confirm，测试侧用 hoisted mock 模拟“用户确认”。
+const confirmMock = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
+vi.mock("./ConfirmDialog.jsx", () => ({
+  useConfirmDialog: () => confirmMock,
+}));
+
 describe("TemplateWorkspace", () => {
-  it("套用模板只更新可编辑项目草稿，取消时不会创建项目", () => {
+  it("套用模板只更新可编辑项目草稿，取消时不会创建项目", async () => {
     const onSave = vi.fn();
     const onClose = vi.fn();
     const templates = getBuiltinProjectTemplates();
@@ -36,13 +43,13 @@ describe("TemplateWorkspace", () => {
     expect(description.value).toContain("项目目标");
     fireEvent.change(description, { target: { value: "用户编辑后的结构" } });
     expect(description.value).toBe("用户编辑后的结构");
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    confirmMock.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "关闭添加项目" }));
-    expect(onClose).toHaveBeenCalledOnce();
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("自定义模板管理操作均可通过键盘可见按钮触发", () => {
+  it("自定义模板管理操作均可通过键盘可见按钮触发", async () => {
     const custom = {
       id: "custom-note-1",
       type: "note",
@@ -56,7 +63,7 @@ describe("TemplateWorkspace", () => {
     const onDuplicate = vi.fn(() => ({ ok: true }));
     const onMove = vi.fn(() => ({ ok: true }));
     const onDelete = vi.fn(() => ({ ok: true }));
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    confirmMock.mockClear();
     render(
       <TemplateWorkspace
         type="note"
@@ -92,6 +99,6 @@ describe("TemplateWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "删除团队大纲" }));
     expect(onDuplicate).toHaveBeenCalledWith("custom-note-1");
     expect(onMove).toHaveBeenCalledWith("custom-note-1", 1);
-    expect(onDelete).toHaveBeenCalledWith("custom-note-1");
+    await waitFor(() => expect(onDelete).toHaveBeenCalledWith("custom-note-1"));
   });
 });

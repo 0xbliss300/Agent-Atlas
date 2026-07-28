@@ -2,6 +2,17 @@ import { ArrowRight, Clock, GearSix, MagnifyingGlass, Plus, X } from "@phosphor-
 import { ProjectCard } from "../components/ProjectCard.jsx";
 import { STATUS_FILTER_OPTIONS } from "../data/settings.js";
 
+function formatRelativeAccessTime(iso) {
+  const timestamp = Date.parse(iso);
+  if (!Number.isFinite(timestamp)) return "时间未知";
+  const diff = Date.now() - timestamp;
+  if (diff < 60_000) return "刚刚";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
+  if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)} 天前`;
+  return new Date(timestamp).toLocaleString("zh-CN", { dateStyle: "short" });
+}
+
 function EmptyState({ onAdd, disabled }) {
   return (
     <section className="empty-state" aria-labelledby="empty-title">
@@ -25,11 +36,15 @@ export function OverviewPage({
   summary,
   recentProjects,
   showRecent,
+  recentAccess = [],
+  onClearRecentAccess,
   onAdd,
   onOpenSettings,
   navigate,
   storeError,
   query,
+  noteSearchResults = [],
+  taskSearchResults = [],
   statusFilter,
   tagFilter,
   collectionFilter,
@@ -44,11 +59,10 @@ export function OverviewPage({
   onTogglePin,
 }) {
   const latestProject = recentProjects[0];
+  const queryActive = Boolean(query.trim());
+  const totalSearchHits = noteSearchResults.length + taskSearchResults.length;
   const filtersActive =
-    Boolean(query.trim()) ||
-    statusFilter !== "all" ||
-    tagFilter !== "all" ||
-    collectionFilter !== "all";
+    queryActive || statusFilter !== "all" || tagFilter !== "all" || collectionFilter !== "all";
   const clearFilters = () => {
     onQueryChange("");
     onStatusFilterChange("all");
@@ -97,16 +111,55 @@ export function OverviewPage({
         </div>
       </section>
 
+      {recentAccess.length > 0 && (
+        <section className="recent-access" aria-labelledby="recent-access-title">
+          <div className="section-title">
+            <h2 id="recent-access-title">最近访问</h2>
+            <span>快速跳转</span>
+            <button
+              type="button"
+              className="text-button"
+              onClick={onClearRecentAccess}
+              aria-label="清空最近访问记录"
+            >
+              清空
+            </button>
+          </div>
+          <ol className="recent-access-list">
+            {recentAccess.map(({ project, accessedAt }, index) => (
+              <li key={project.id}>
+                <button
+                  type="button"
+                  className="recent-access-item"
+                  onClick={() => navigate("/project/" + project.id)}
+                  title={project.name}
+                >
+                  <span className={"activity-dot " + project.statusTone} aria-hidden="true" />
+                  <span className="recent-access-name">{project.name}</span>
+                  <small className="recent-access-time">
+                    {formatRelativeAccessTime(accessedAt)}
+                  </small>
+                  <span className="recent-access-index" aria-hidden="true">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       {projects.length > 0 && (
         <section className="project-controls" aria-label="项目搜索、筛选和排序">
           <label className="project-search">
-            <span className="sr-only">搜索项目</span>
+            <span className="sr-only">全局搜索项目、笔记、任务与阻塞</span>
             <MagnifyingGlass size={19} aria-hidden="true" />
             <input
+              id="overview-search"
               type="search"
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="搜索名称、简介、标签或技术关键词"
+              placeholder="搜索项目、笔记正文、任务与阻塞"
             />
           </label>
           <label className="control-select">
@@ -162,12 +215,63 @@ export function OverviewPage({
           </label>
           <p className="filter-result" aria-live="polite">
             显示 {visibleProjects.length} / {projects.length} 个项目
+            {queryActive &&
+              `，命中 ${noteSearchResults.length} 篇笔记、${taskSearchResults.length} 项任务与阻塞`}
           </p>
           {filtersActive && (
             <button className="clear-filters" onClick={clearFilters}>
               <X size={16} />
               清除筛选
             </button>
+          )}
+        </section>
+      )}
+
+      {queryActive && totalSearchHits > 0 && (
+        <section className="search-results" aria-label="全局搜索结果">
+          <div className="section-title">
+            <h2>全局搜索</h2>
+            <span>{totalSearchHits} 条命中</span>
+          </div>
+          {noteSearchResults.length > 0 && (
+            <div className="search-results-group">
+              <h3>研究笔记</h3>
+              <ul className="search-results-list">
+                {noteSearchResults.map((result) => (
+                  <li key={result.id}>
+                    <button
+                      type="button"
+                      className="search-result-item"
+                      onClick={() => navigate(result.route)}
+                    >
+                      <span className="search-result-title">{result.title}</span>
+                      <span className="search-result-excerpt">{result.excerpt}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {taskSearchResults.length > 0 && (
+            <div className="search-results-group">
+              <h3>任务与阻塞</h3>
+              <ul className="search-results-list">
+                {taskSearchResults.map((result) => (
+                  <li key={result.id}>
+                    <button
+                      type="button"
+                      className="search-result-item"
+                      onClick={() => navigate(result.route)}
+                    >
+                      <span className="search-result-title">{result.title}</span>
+                      <span className="search-result-meta">
+                        {result.projectName} · {result.typeLabel}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </section>
       )}

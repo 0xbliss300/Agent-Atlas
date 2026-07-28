@@ -62,7 +62,7 @@ describe("P2 项目增强", () => {
         onSortChange={onSortChange}
       />,
     );
-    fireEvent.change(screen.getByRole("searchbox", { name: "搜索项目" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: /全局搜索/ }), {
       target: { value: "React" },
     });
     fireEvent.change(screen.getByLabelText("状态"), { target: { value: "active" } });
@@ -97,5 +97,89 @@ describe("P2 项目增强", () => {
     expect(onToggleTask).toHaveBeenCalledWith("task-1");
     expect(onOpenSync).toHaveBeenCalledOnce();
     expect(onOpenCodexContext).toHaveBeenCalledOnce();
+  });
+
+  it("概览页全局搜索渲染笔记与任务结果并点击跳转稳定路由", () => {
+    const navigate = vi.fn();
+    render(
+      <OverviewPage
+        projects={[project]}
+        visibleProjects={[project]}
+        summary={{ total: 1, active: 1, done: 0 }}
+        recentProjects={[]}
+        showRecent={false}
+        notesMode={false}
+        onAdd={() => {}}
+        onOpenSettings={() => {}}
+        navigate={navigate}
+        storeError={null}
+        query="向量"
+        noteSearchResults={[
+          {
+            id: "note:note-1",
+            noteId: "note-1",
+            projectId: "project-1",
+            title: "检索实验记录",
+            excerpt: "baseline 命中率 82%。",
+            route: "/notes/note-1",
+            updatedTimestamp: 0,
+          },
+        ]}
+        taskSearchResults={[
+          {
+            id: "task:project-1:task-1",
+            type: "task",
+            typeLabel: "任务",
+            entryId: "task-1",
+            projectId: "project-1",
+            projectName: "知识库 Agent",
+            title: "接入向量数据库",
+            route: "/project/project-1",
+            updatedTimestamp: 0,
+          },
+        ]}
+        statusFilter="all"
+        tagFilter="all"
+        collectionFilter="all"
+        sortBy="updated"
+        onQueryChange={() => {}}
+        onStatusFilterChange={() => {}}
+        onSortChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "研究笔记" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "任务与阻塞" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("检索实验记录"));
+    expect(navigate).toHaveBeenCalledWith("/notes/note-1");
+    fireEvent.click(screen.getByText("接入向量数据库"));
+    expect(navigate).toHaveBeenCalledWith("/project/project-1");
+  });
+
+  it("搜索无命中时不渲染全局搜索结果区", () => {
+    render(
+      <OverviewPage
+        projects={[project]}
+        visibleProjects={[project]}
+        summary={{ total: 1, active: 1, done: 0 }}
+        recentProjects={[]}
+        showRecent={false}
+        notesMode={false}
+        onAdd={() => {}}
+        onOpenSettings={() => {}}
+        navigate={() => {}}
+        storeError={null}
+        query="不存在的关键词"
+        noteSearchResults={[]}
+        taskSearchResults={[]}
+        statusFilter="all"
+        tagFilter="all"
+        collectionFilter="all"
+        sortBy="updated"
+        onQueryChange={() => {}}
+        onStatusFilterChange={() => {}}
+        onSortChange={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("region", { name: "全局搜索结果" })).not.toBeInTheDocument();
   });
 });

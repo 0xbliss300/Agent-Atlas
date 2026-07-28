@@ -8,6 +8,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { createWorkbenchModel, filterWorkbenchItems } from "../data/workbench.js";
+import { OnboardingTip } from "../components/OnboardingTip.jsx";
 
 function SourceLink({ item, navigate }) {
   const isNote = item.type === "note";
@@ -144,6 +145,8 @@ export function WorkbenchPage({
   onResolveBlocker,
   storeError,
   collections = [],
+  onboardingActive = false,
+  onSkipOnboarding = () => {},
 }) {
   const model = useMemo(
     () => createWorkbenchModel(projects, researchNotes),
@@ -212,6 +215,15 @@ export function WorkbenchPage({
           <Warning size={20} weight="fill" />
           <span>{storeError}</span>
         </div>
+      ) : null}
+
+      {onboardingActive ? (
+        <OnboardingTip
+          title="首次使用工作台"
+          body="工作台从项目派生执行队列。先回到概览添加或导入第一个项目，再回来查看跨任务与阻塞。"
+          onStart={() => navigate("/")}
+          onSkip={onSkipOnboarding}
+        />
       ) : null}
 
       <section className="workbench-rule" aria-label="停滞判断说明">

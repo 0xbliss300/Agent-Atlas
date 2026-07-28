@@ -1,16 +1,19 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { GithubLogo } from "@phosphor-icons/react";
 import { Header } from "./components/Header.jsx";
+import { CommandPalette } from "./components/CommandPalette.jsx";
+import { Toast } from "./components/Toast.jsx";
+import { useConfirmDialog, useConfirmDialogOpen } from "./components/ConfirmDialog.jsx";
+import { Onboarding } from "./components/Onboarding.jsx";
 import { CodexContextPanel } from "./components/CodexContextPanel.jsx";
 import { LocalSyncPanel } from "./components/LocalSyncPanel.jsx";
 import { ProjectFormPanel } from "./components/ProjectFormPanel.jsx";
 import { SettingsPanel } from "./components/SettingsPanel.jsx";
-import { createAppBackup, importAppBackup } from "./data/backup.js";
+import { createAppBackup, createSingleProjectBackup, importAppBackup } from "./data/backup.js";
 import {
   applyProjectStatusSync,
   createProjectRecord,
   createResearchNotes,
-  deleteProjectRecord,
   duplicateProjectRecord,
   findProjectById,
   loadProjectStore,
@@ -24,8 +27,6 @@ import {
 } from "./data/projects.js";
 import {
   createResearchNoteRecord,
-  deleteResearchNoteRecord,
-  deleteResearchNotesForProject,
   findResearchNoteById,
   loadResearchNoteStore,
   saveResearchNoteStore,
@@ -33,13 +34,10 @@ import {
   sortResearchNotes,
   updateResearchNoteRecord,
 } from "./data/researchNotes.js";
+import { searchProjectTasks, searchResearchNotes } from "./data/search.js";
 import {
   addResearchNoteHistorySnapshot,
   deleteResearchNoteDraft,
-  deleteResearchNoteDraftsForNote,
-  deleteResearchNoteDraftsForProject,
-  deleteResearchNoteHistoriesForNote,
-  deleteResearchNoteHistoriesForProject,
   findResearchNoteDraft,
   getResearchNoteDraftKey,
   loadResearchNoteDraftStore,
@@ -57,9 +55,7 @@ import {
   createProjectUpdatedEvent,
   createResearchNoteEvent,
   createTaskToggledEvent,
-  deleteProjectEventsForProject,
   loadProjectEventStore,
-  markResearchNoteSourceDeleted,
   saveProjectEventStore,
   selectProjectEvents,
 } from "./data/projectEvents.js";
@@ -80,6 +76,21 @@ import {
 import { loadSettings, saveSettings, selectVisibleProjects } from "./data/settings.js";
 import { getProjectTagOptions } from "./data/settings.js";
 import {
+  clearRecentAccess,
+  loadRecentAccess,
+  recordRecentAccess,
+  saveRecentAccess,
+} from "./data/recentAccess.js";
+import {
+  emptyTrash,
+  loadTrashStore,
+  permanentlyDeleteTrashEntry,
+  restoreTrashEntry,
+  saveTrashStore,
+  softDeleteProject,
+  softDeleteResearchNote,
+} from "./data/trash.js";
+import {
   createCollection,
   deleteCollection,
   loadCollectionStore,
@@ -89,12 +100,14 @@ import {
   sortCollections,
 } from "./data/organization.js";
 import { useRoute } from "./hooks/useRoute.js";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts.js";
 import { useFilePersistenceStatus } from "./hooks/useFilePersistenceStatus.js";
 import { retryFilePersistence } from "./data/filePersistence.js";
 import { NotFoundPage } from "./pages/NotFoundPage.jsx";
 import { OverviewPage } from "./pages/OverviewPage.jsx";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage.jsx";
 import { ResearchNotesPage } from "./pages/ResearchNotesPage.jsx";
+import { TrashPage } from "./pages/TrashPage.jsx";
 import { UserGuidePage } from "./pages/UserGuidePage.jsx";
 import { WorkbenchPage } from "./pages/WorkbenchPage.jsx";
 import { getPageTitle, parseRoute } from "./routing.js";
@@ -116,6 +129,8 @@ export function App() {
   const [templateState, setTemplateState] = useState(() => loadTemplateStore());
   const [collectionState, setCollectionState] = useState(() => loadCollectionStore());
   const [settingsState, setSettingsState] = useState(() => loadSettings());
+  const [recentAccessState, setRecentAccessState] = useState(() => loadRecentAccess());
+  const [trashState, setTrashState] = useState(() => loadTrashStore());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [formState, setFormState] = useState(null);
   const [syncProjectId, setSyncProjectId] = useState(null);
@@ -125,6 +140,14 @@ export function App() {
   const [tagFilter, setTagFilter] = useState("all");
   const [collectionFilter, setCollectionFilter] = useState("all");
   const [notice, setNotice] = useState("");
+  const [toast, setToast] = useState({ message: "", type: "success", id: 0 });
+  const showNotice = (message, type = "success") => {
+    setNotice(message);
+    setToast({ message, type, id: Date.now() });
+  };
+  const closeToast = () => setToast({ message: "", type: "success", id: 0 });
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteHelp, setPaletteHelp] = useState(false);
 
   const projects = storeState.projects;
   const settings = settingsState.settings;
@@ -160,10 +183,27 @@ export function App() {
     () => sortProjectsByUpdatedAt(settingsVisibleProjects),
     [settingsVisibleProjects],
   );
+  const recentAccessItems = useMemo(() => {
+    const byId = new Map(projects.map((project) => [project.id, project]));
+    return recentAccessState.entries
+      .map((entry) => {
+        const project = byId.get(entry.projectId);
+        return project ? { project, accessedAt: entry.accessedAt } : null;
+      })
+      .filter(Boolean);
+  }, [recentAccessState.entries, projects]);
   const activityNotes = useMemo(() => createResearchNotes(projects), [projects]);
   const researchNotes = useMemo(
     () => sortResearchNotes(noteStoreState.notes),
     [noteStoreState.notes],
+  );
+  const noteSearchResults = useMemo(
+    () => searchResearchNotes(researchNotes, projectQuery),
+    [researchNotes, projectQuery],
+  );
+  const taskSearchResults = useMemo(
+    () => searchProjectTasks(projects, projectQuery),
+    [projects, projectQuery],
   );
   const projectTemplates = useMemo(
     () => getTemplatesByType(templateState.templates, TEMPLATE_TYPES.PROJECT),
@@ -204,13 +244,32 @@ export function App() {
       ? "workbench"
       : route.type === "guide"
         ? "guide"
-        : notesNavActive
-          ? "notes"
-          : route.type === "overview"
-            ? "overview"
-            : null;
+        : route.type === "trash"
+          ? "trash"
+          : notesNavActive
+            ? "notes"
+            : route.type === "overview"
+              ? "overview"
+              : null;
+  const onboardingOpen =
+    settings.onboardingState === "pending" &&
+    projects.length === 0 &&
+    route.type === "overview" &&
+    !settingsOpen &&
+    !paletteOpen &&
+    !formState &&
+    !syncProjectId &&
+    !contextProjectId;
   const modalOpen =
-    settingsOpen || Boolean(formState) || Boolean(syncProjectId) || Boolean(contextProjectId);
+    settingsOpen ||
+    paletteOpen ||
+    onboardingOpen ||
+    Boolean(formState) ||
+    Boolean(syncProjectId) ||
+    Boolean(contextProjectId);
+  const confirmDialog = useConfirmDialog();
+  const confirmOpen = useConfirmDialogOpen();
+  const modalOrConfirmOpen = modalOpen || confirmOpen;
 
   useEffect(() => {
     document.title = getPageTitle(route, project, researchNote);
@@ -229,11 +288,56 @@ export function App() {
     }
   }, [collectionFilter, collections]);
 
+  // TODO-060: 进入项目详情路由（含 /project/:id 与 /project/:id/notes）时记录最近访问。
+  // 仅在 route.projectId 或 route.type 变化时触发；projects 列表刷新不重复记录。
+  const recentAccessRef = useRef(recentAccessState.entries);
+  recentAccessRef.current = recentAccessState.entries;
+  const lastRecordedProjectIdRef = useRef(null);
+  useEffect(() => {
+    const isInProjectRoute = route.type === "project" || route.type === "project-notes";
+    const currentProjectId = isInProjectRoute ? route.projectId : null;
+    if (
+      currentProjectId &&
+      currentProjectId !== lastRecordedProjectIdRef.current &&
+      findProjectById(projects, currentProjectId)
+    ) {
+      const nextEntries = recordRecentAccess(recentAccessRef.current, currentProjectId);
+      saveRecentAccess(nextEntries);
+      setRecentAccessState({ entries: nextEntries, error: null });
+    }
+    lastRecordedProjectIdRef.current = currentProjectId;
+  }, [route.projectId, route.type, projects]);
+
   const openCreate = () => {
     if (!storeState.error) {
       setFormState({ mode: "create", projectId: null });
     }
   };
+
+  const openTrash = () => {
+    setSettingsOpen(false);
+    navigate("/trash");
+  };
+
+  const openPalette = () => {
+    setPaletteHelp(false);
+    setPaletteOpen(true);
+  };
+  const openPaletteHelp = () => {
+    setPaletteHelp(true);
+    setPaletteOpen(true);
+  };
+  const focusOverviewSearch = () => {
+    document.getElementById("overview-search")?.focus();
+  };
+  useKeyboardShortcuts({
+    enabled: settings.enableShortcuts,
+    onOpenPalette: openPalette,
+    onOpenHelp: openPaletteHelp,
+    onFocusSearch: focusOverviewSearch,
+    onNewProject: openCreate,
+    navigate,
+  });
 
   const persistProjects = (nextProjects) => {
     saveProjectStore(nextProjects);
@@ -270,12 +374,17 @@ export function App() {
     setCollectionState({ collections: normalized, error: null });
   };
 
+  const persistTrash = (nextEntries) => {
+    saveTrashStore(nextEntries);
+    setTrashState({ entries: nextEntries, error: null });
+  };
+
   const collectionResult = (operation, successMessage) => {
     if (collectionState.error) return { ok: false, error: collectionState.error };
     try {
       const nextCollections = operation();
       persistCollections(nextCollections);
-      setNotice(successMessage);
+      showNotice(successMessage);
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error.message || "项目集合操作失败。" };
@@ -306,7 +415,7 @@ export function App() {
       setStoreState({ projects: result.projects, error: null });
       setCollectionState({ collections: normalizedCollections, error: null });
       if (collectionFilter === collectionId) setCollectionFilter("all");
-      setNotice("项目集合已删除，仅解除项目关联。");
+      showNotice("项目集合已删除，仅解除项目关联。");
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error.message || "项目集合删除失败。" };
@@ -318,7 +427,7 @@ export function App() {
     try {
       const nextTemplates = operation();
       if (nextTemplates) persistTemplates(nextTemplates);
-      if (successMessage) setNotice(successMessage);
+      if (successMessage) showNotice(successMessage);
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error.message || "模板操作失败。" };
@@ -441,15 +550,46 @@ export function App() {
     }
   };
 
-  const updateSettings = (partial) => {
+  const updateSettings = (partial, options = {}) => {
     try {
       const nextSettings = saveSettings({ ...settings, ...partial });
       setSettingsState({ settings: nextSettings, error: null });
-      setNotice("显示设置已保存。");
+      if (!options.silent) showNotice("显示设置已保存。");
     } catch (error) {
-      setNotice(error.message || "显示设置保存失败。");
+      showNotice(error.message || "显示设置保存失败。", "error");
     }
   };
+
+  const handleClearRecentAccess = () => {
+    try {
+      clearRecentAccess();
+      setRecentAccessState({ entries: [], error: null });
+      showNotice("最近访问记录已清空。");
+    } catch (error) {
+      showNotice(error.message || "最近访问记录清空失败。", "error");
+    }
+  };
+
+  const completeOnboarding = () =>
+    updateSettings({ onboardingState: "completed" }, { silent: true });
+
+  const skipOnboarding = () => {
+    updateSettings({ onboardingState: "skipped" }, { silent: true });
+    showNotice("已跳过首次使用引导，可在设置中重新启动。");
+  };
+
+  const restartOnboarding = () => {
+    updateSettings({ onboardingState: "pending" }, { silent: true });
+    setSettingsOpen(false);
+    showNotice("已重新启动首次使用引导。");
+    navigate("/");
+  };
+
+  useEffect(() => {
+    if (projects.length > 0 && settings.onboardingState === "pending") {
+      updateSettings({ onboardingState: "completed" }, { silent: true });
+    }
+  }, [projects.length, settings.onboardingState, updateSettings]);
 
   const createProject = (draft, sourceMetadata = null) => {
     try {
@@ -457,7 +597,7 @@ export function App() {
       persistProjects([...projects, created]);
       const timelineWarning = recordProjectEvent(createProjectCreatedEvent(created));
       setFormState(null);
-      setNotice("已创建项目：" + created.name + (timelineWarning ? `；${timelineWarning}。` : ""));
+      showNotice("已创建项目：" + created.name + (timelineWarning ? `；${timelineWarning}。` : ""));
       navigate("/project/" + created.id);
       return { ok: true };
     } catch (error) {
@@ -475,7 +615,7 @@ export function App() {
       const previous = findProjectById(projects, edited.id);
       const timelineWarning = recordProjectEvent(createProjectUpdatedEvent(previous, edited));
       setFormState(null);
-      setNotice("已保存项目：" + edited.name + (timelineWarning ? `；${timelineWarning}。` : ""));
+      showNotice("已保存项目：" + edited.name + (timelineWarning ? `；${timelineWarning}。` : ""));
       return { ok: true };
     } catch (error) {
       return {
@@ -490,71 +630,53 @@ export function App() {
       const duplicate = duplicateProjectRecord(project.id, projects);
       persistProjects([...projects, duplicate]);
       const timelineWarning = recordProjectEvent(createProjectCreatedEvent(duplicate));
-      setNotice(
+      showNotice(
         "已复制项目：" + duplicate.name + (timelineWarning ? `；${timelineWarning}。` : ""),
       );
       navigate("/project/" + duplicate.id);
     } catch (error) {
-      setNotice(error.message || "复制项目失败。");
+      showNotice(error.message || "复制项目失败。", "error");
     }
   };
 
-  const removeProject = () => {
+  const removeProject = async () => {
     if (noteStoreState.error) {
-      setNotice("研究笔记本地数据当前无法读取，请先在设置中恢复或清除损坏数据。");
+      showNotice("研究笔记本地数据当前无法读取，请先在设置中恢复或清除损坏数据。", "error");
       return;
     }
     const relatedNotes = researchNotes.filter((note) => note.projectId === project.id);
     const relatedMessage = relatedNotes.length
-      ? `并同时删除关联的 ${relatedNotes.length} 篇研究笔记`
+      ? `及其关联的 ${relatedNotes.length} 篇研究笔记`
       : "";
-    if (
-      !window.confirm(
-        "确定删除项目“" + project.name + "”" + relatedMessage + "吗？此操作无法撤销。",
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmDialog({
+      title: "删除项目",
+      message: `确定删除项目“${project.name}”${relatedMessage}吗？`,
+      detail: "删除后可在回收站中保留 7 天，期间可随时恢复。",
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
 
     try {
-      persistProjects(deleteProjectRecord(project.id, projects));
-      persistResearchNotes(deleteResearchNotesForProject(project.id, researchNotes));
-      const cleanupWarnings = [];
-      if (!noteDraftState.error) {
-        try {
-          persistResearchNoteDrafts(
-            deleteResearchNoteDraftsForProject(noteDraftState.drafts, project.id),
-          );
-        } catch {
-          cleanupWarnings.push("草稿清理失败");
-        }
-      }
-      if (!noteHistoryState.error) {
-        try {
-          persistResearchNoteHistories(
-            deleteResearchNoteHistoriesForProject(noteHistoryState.histories, project.id),
-          );
-        } catch {
-          cleanupWarnings.push("版本历史清理失败");
-        }
-      }
-      if (!projectEventState.error) {
-        try {
-          persistProjectEvents(deleteProjectEventsForProject(projectEventState.events, project.id));
-        } catch {
-          cleanupWarnings.push("变更时间线清理失败");
-        }
-      } else {
-        cleanupWarnings.push("变更时间线当前不可用");
-      }
-      setNotice(
-        "已删除项目：" +
-          project.name +
-          (cleanupWarnings.length ? `；${cleanupWarnings.join("、")}。` : ""),
+      const result = softDeleteProject(
+        project.id,
+        projects,
+        researchNotes,
+        noteHistoryState.histories,
+        projectEventState.events,
+        noteDraftState.drafts,
+        trashState.entries,
       );
+      persistProjects(result.projects);
+      persistResearchNotes(result.notes);
+      persistResearchNoteHistories(result.histories);
+      persistProjectEvents(result.events);
+      persistResearchNoteDrafts(result.drafts);
+      persistTrash(result.trashEntries);
+      showNotice(`已将项目“${project.name}”移入回收站，可在 7 天内恢复。`);
       navigate("/");
     } catch (error) {
-      setNotice(error.message || "删除项目失败。");
+      showNotice(error.message || "删除项目失败。", "error");
     }
   };
 
@@ -568,6 +690,7 @@ export function App() {
           projectEventState.events,
           templateState.templates,
           collections,
+          trashState.entries,
         ),
       ],
       {
@@ -580,7 +703,7 @@ export function App() {
     anchor.download = "agent-projects-" + new Date().toISOString().slice(0, 10) + ".json";
     anchor.click();
     URL.revokeObjectURL(url);
-    setNotice(
+    showNotice(
       "已导出 " +
         projects.length +
         " 个项目、" +
@@ -593,6 +716,60 @@ export function App() {
         templateState.templates.length +
         " 个自定义模板和 " +
         collections.length +
+        " 个项目集合和 " +
+        trashState.entries.length +
+        " 条回收站条目。",
+    );
+  };
+
+  const exportSingleProject = (project) => {
+    const projectNotes = selectProjectResearchNotes(researchNotes, project.id);
+    const projectNoteIds = new Set(projectNotes.map((note) => note.id));
+    const projectHistories = noteHistoryState.histories.filter((snapshot) =>
+      projectNoteIds.has(snapshot.noteId),
+    );
+    const projectEvents = projectEventState.events.filter(
+      (event) => event.projectId === project.id,
+    );
+    const projectCollectionIds = new Set(project.collectionIds ?? []);
+    const projectCollections = collections.filter((collection) =>
+      projectCollectionIds.has(collection.id),
+    );
+
+    const blob = new Blob(
+      [
+        createSingleProjectBackup(
+          project,
+          projectNotes,
+          projectHistories,
+          projectEvents,
+          projectCollections,
+        ),
+      ],
+      { type: "application/json;charset=utf-8" },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download =
+      "agent-project-" +
+      (project.slug || project.id) +
+      "-" +
+      new Date().toISOString().slice(0, 10) +
+      ".json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    showNotice(
+      "已导出项目“" +
+        project.name +
+        "”及 " +
+        projectNotes.length +
+        " 篇研究笔记、" +
+        projectHistories.length +
+        " 个历史版本、" +
+        projectEvents.length +
+        " 条变更事件和 " +
+        projectCollections.length +
         " 个项目集合。",
     );
   };
@@ -608,6 +785,7 @@ export function App() {
         projectEventState.events,
         templateState.templates,
         collections,
+        trashState.entries,
       );
       persistProjects(result.projects);
       persistResearchNotes(result.notes);
@@ -615,7 +793,8 @@ export function App() {
       persistProjectEvents(result.events);
       persistTemplates(result.templates);
       persistCollections(result.collections);
-      setNotice(
+      persistTrash(result.trash);
+      showNotice(
         "已导入 " +
           result.importedCount +
           " 个项目和 " +
@@ -639,11 +818,78 @@ export function App() {
     }
   };
 
-  const resetProjects = () => {
-    const resetMessage = dataStoreError
-      ? "确定清除当前损坏的本地项目、研究笔记或模板数据吗？此操作无法撤销。"
-      : `确定清空全部 ${projects.length} 个项目、${researchNotes.length} 篇研究笔记、${templateState.templates.length} 个自定义模板和 ${collections.length} 个项目集合吗？此操作无法撤销。`;
-    if (!window.confirm(resetMessage)) return;
+  const restoreFromTrash = (entry) => {
+    try {
+      const result = restoreTrashEntry(
+        entry,
+        projects,
+        researchNotes,
+        noteHistoryState.histories,
+        projectEventState.events,
+        noteDraftState.drafts,
+      );
+      persistProjects(result.projects);
+      persistResearchNotes(result.notes);
+      persistResearchNoteHistories(result.histories);
+      persistProjectEvents(result.events);
+      persistResearchNoteDrafts(result.drafts);
+      persistTrash(permanentlyDeleteTrashEntry(entry.id, trashState.entries));
+      const restoredName = entry.kind === "project" ? entry.project.name : entry.note.title;
+      showNotice(`已恢复“${restoredName}”及其关联内容。`);
+      return { ok: true };
+    } catch (error) {
+      const message = error.message || "恢复失败。";
+      showNotice(message, "error");
+      return { ok: false, error: message };
+    }
+  };
+
+  const deleteFromTrash = (entry) => {
+    try {
+      persistTrash(permanentlyDeleteTrashEntry(entry.id, trashState.entries));
+      const deletedName = entry.kind === "project" ? entry.project.name : entry.note.title;
+      showNotice(`已彻底删除“${deletedName}”。`);
+      return { ok: true };
+    } catch (error) {
+      const message = error.message || "彻底删除失败。";
+      showNotice(message, "error");
+      return { ok: false, error: message };
+    }
+  };
+
+  const clearTrash = async () => {
+    const ok = await confirmDialog({
+      title: "清空回收站",
+      message: `确定清空回收站中的 ${trashState.entries.length} 条条目吗？`,
+      detail: "此操作无法撤销。",
+      confirmText: "清空回收站",
+      danger: true,
+    });
+    if (!ok) return { ok: false };
+    try {
+      persistTrash(emptyTrash());
+      showNotice("已清空回收站。");
+      return { ok: true };
+    } catch (error) {
+      const message = error.message || "清空回收站失败。";
+      showNotice(message, "error");
+      return { ok: false, error: message };
+    }
+  };
+
+  const resetProjects = async () => {
+    const isCorrupted = Boolean(dataStoreError);
+    const message = isCorrupted
+      ? "确定清除当前损坏的本地项目、研究笔记或模板数据吗？"
+      : `确定清空全部 ${projects.length} 个项目、${researchNotes.length} 篇研究笔记、${templateState.templates.length} 个自定义模板、${collections.length} 个项目集合和 ${trashState.entries.length} 条回收站条目吗？`;
+    const ok = await confirmDialog({
+      title: isCorrupted ? "清除损坏的本地数据" : "清空全部本地内容",
+      message,
+      detail: "此操作无法撤销。",
+      confirmText: isCorrupted ? "清除" : "清空全部",
+      danger: true,
+    });
+    if (!ok) return;
 
     try {
       persistProjects([]);
@@ -653,11 +899,12 @@ export function App() {
       persistProjectEvents([]);
       persistTemplates([]);
       persistCollections([]);
+      persistTrash(emptyTrash());
       setSettingsOpen(false);
-      setNotice("已清空全部项目、研究笔记、自定义模板和项目集合。");
+      showNotice("已清空全部项目、研究笔记、自定义模板、项目集合和回收站。");
       navigate("/");
     } catch (error) {
-      setNotice(error.message || "清空项目失败。");
+      showNotice(error.message || "清空项目失败。", "error");
     }
   };
 
@@ -673,11 +920,11 @@ export function App() {
       );
       const message = currentTask?.done ? "任务已恢复为待办。" : "任务已标记完成。";
       const completeMessage = message + (timelineWarning ? ` ${timelineWarning}。` : "");
-      setNotice(completeMessage);
+      showNotice(completeMessage);
       return { ok: true, message: completeMessage };
     } catch (error) {
       const message = error.message || "任务状态更新失败。";
-      setNotice(message);
+      showNotice(message, "error");
       return { ok: false, error: message };
     }
   };
@@ -685,11 +932,11 @@ export function App() {
   const toggleProjectPin = (projectId, pinned) => {
     try {
       persistProjects(setProjectPinned(projectId, pinned, projects));
-      setNotice(pinned ? "项目已置顶。" : "项目已取消置顶。");
+      showNotice(pinned ? "项目已置顶。" : "项目已取消置顶。");
       return { ok: true };
     } catch (error) {
       const message = error.message || "项目置顶状态更新失败。";
-      setNotice(message);
+      showNotice(message, "error");
       return { ok: false, error: message };
     }
   };
@@ -704,11 +951,11 @@ export function App() {
         createBlockerToggledEvent(currentProject, nextProject, blockerId),
       );
       const message = "阻塞项已标记解决。" + (timelineWarning ? ` ${timelineWarning}。` : "");
-      setNotice(message);
+      showNotice(message);
       return { ok: true, message };
     } catch (error) {
       const message = error.message || "阻塞项更新失败。";
-      setNotice(message);
+      showNotice(message, "error");
       return { ok: false, error: message };
     }
   };
@@ -723,7 +970,7 @@ export function App() {
         createLocalStatusEvent(previous, nextProject, syncResult),
       );
       setSyncProjectId(null);
-      setNotice(
+      showNotice(
         "已从本地来源更新项目状态，未上传任何文件。" +
           (timelineWarning ? ` ${timelineWarning}。` : ""),
       );
@@ -780,7 +1027,7 @@ export function App() {
           warnings.push("过期草稿清理失败");
         }
       }
-      setNotice(
+      showNotice(
         (route.type === "note" ? "已保存研究笔记：" : "已创建研究笔记：") +
           saved.title +
           (warnings.length ? `；${warnings.join("、")}。` : ""),
@@ -796,46 +1043,34 @@ export function App() {
     }
   };
 
-  const removeResearchNote = () => {
+  const removeResearchNote = async () => {
     if (!researchNote) return;
-    if (!window.confirm(`确定删除研究笔记“${researchNote.title}”吗？此操作无法撤销。`)) {
-      return;
-    }
+    const ok = await confirmDialog({
+      title: "删除研究笔记",
+      message: `确定删除研究笔记“${researchNote.title}”吗？`,
+      detail: "删除后可在回收站中保留 7 天，期间可随时恢复。",
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     try {
-      persistResearchNotes(deleteResearchNoteRecord(researchNote.id, researchNotes));
-      const warnings = [];
-      const markedEvents = markResearchNoteSourceDeleted(projectEventState.events, researchNote.id);
-      const timelineWarning = recordProjectEvent(
-        createResearchNoteEvent(researchNote, "deleted"),
-        markedEvents,
+      const result = softDeleteResearchNote(
+        researchNote.id,
+        researchNotes,
+        noteHistoryState.histories,
+        projectEventState.events,
+        noteDraftState.drafts,
+        trashState.entries,
       );
-      if (timelineWarning) warnings.push(timelineWarning);
-      if (!noteDraftState.error) {
-        try {
-          persistResearchNoteDrafts(
-            deleteResearchNoteDraftsForNote(noteDraftState.drafts, researchNote.id),
-          );
-        } catch {
-          warnings.push("草稿清理失败");
-        }
-      }
-      if (!noteHistoryState.error) {
-        try {
-          persistResearchNoteHistories(
-            deleteResearchNoteHistoriesForNote(noteHistoryState.histories, researchNote.id),
-          );
-        } catch {
-          warnings.push("版本历史清理失败");
-        }
-      }
-      setNotice(
-        "已删除研究笔记：" +
-          researchNote.title +
-          (warnings.length ? `；${warnings.join("、")}。` : ""),
-      );
+      persistResearchNotes(result.notes);
+      persistProjectEvents(result.events);
+      persistResearchNoteDrafts(result.drafts);
+      persistResearchNoteHistories(result.histories);
+      persistTrash(result.trashEntries);
+      showNotice(`已将研究笔记“${researchNote.title}”移入回收站，可在 7 天内恢复。`);
       navigate("/notes");
     } catch (error) {
-      setNotice(error.message || "删除研究笔记失败。");
+      showNotice(error.message || "删除研究笔记失败。", "error");
     }
   };
 
@@ -853,11 +1088,15 @@ export function App() {
         summary={summary}
         recentProjects={recentProjects}
         showRecent={settings.showRecent}
+        recentAccess={recentAccessItems}
+        onClearRecentAccess={handleClearRecentAccess}
         onAdd={openCreate}
         onOpenSettings={() => setSettingsOpen(true)}
         navigate={navigate}
         storeError={storeState.error}
         query={projectQuery}
+        noteSearchResults={noteSearchResults}
+        taskSearchResults={taskSearchResults}
         statusFilter={statusFilter}
         tagFilter={tagFilter}
         collectionFilter={collectionFilter}
@@ -883,10 +1122,23 @@ export function App() {
         onResolveBlocker={resolveProjectBlocker}
         storeError={storeState.error || noteStoreState.error}
         collections={collections}
+        onboardingActive={settings.onboardingState === "pending"}
+        onSkipOnboarding={skipOnboarding}
       />
     );
   } else if (route.type === "guide") {
     page = <UserGuidePage navigate={navigate} />;
+  } else if (route.type === "trash") {
+    page = (
+      <TrashPage
+        entries={trashState.entries}
+        storeError={trashState.error}
+        navigate={navigate}
+        onRestore={restoreFromTrash}
+        onDelete={deleteFromTrash}
+        onClear={clearTrash}
+      />
+    );
   } else if (route.type === "notes") {
     page = (
       <ResearchNotesPage
@@ -897,6 +1149,8 @@ export function App() {
         onNewNote={() => navigate("/notes/new")}
         navigate={navigate}
         storeError={storeState.error || noteStoreState.error}
+        onboardingActive={settings.onboardingState === "pending"}
+        onSkipOnboarding={skipOnboarding}
       />
     );
   } else if (route.type === "note-new") {
@@ -969,6 +1223,7 @@ export function App() {
         onEdit={() => setFormState({ mode: "edit", projectId: project.id })}
         onDuplicate={duplicateProject}
         onDelete={removeProject}
+        onExportProject={() => exportSingleProject(project)}
         onToggleTask={(taskId) => updateProjectTask(project.id, taskId)}
         onOpenSync={() => setSyncProjectId(project.id)}
         onOpenCodexContext={() => setContextProjectId(project.id)}
@@ -989,8 +1244,8 @@ export function App() {
     <div className={"app-shell density-" + settings.density}>
       <div
         className="page-content"
-        inert={modalOpen ? true : undefined}
-        aria-hidden={modalOpen ? "true" : undefined}
+        inert={modalOrConfirmOpen ? true : undefined}
+        aria-hidden={modalOrConfirmOpen ? "true" : undefined}
       >
         <Header
           navigate={navigate}
@@ -999,6 +1254,7 @@ export function App() {
           onSettings={() => setSettingsOpen(true)}
           onAdd={openCreate}
           addDisabled={Boolean(storeState.error)}
+          onOpenPalette={openPalette}
         />
         <Suspense
           fallback={
@@ -1049,6 +1305,34 @@ export function App() {
         {notice}
       </p>
 
+      <CommandPalette
+        open={paletteOpen}
+        initialHelp={paletteHelp}
+        onClose={() => setPaletteOpen(false)}
+        navigate={navigate}
+        onNewProject={openCreate}
+        onNewNote={() => navigate("/notes/new")}
+        onOpenSettings={() => setSettingsOpen(true)}
+        projects={projects}
+        researchNotes={researchNotes}
+      />
+
+      <Toast
+        key={toast.id}
+        message={toast.message}
+        type={toast.type}
+        enabled={!modalOrConfirmOpen}
+        onClose={closeToast}
+      />
+
+      <Onboarding
+        open={onboardingOpen}
+        onComplete={completeOnboarding}
+        onSkip={skipOnboarding}
+        onAdd={openCreate}
+        navigate={navigate}
+      />
+
       {settingsOpen && (
         <SettingsPanel
           close={() => setSettingsOpen(false)}
@@ -1065,10 +1349,13 @@ export function App() {
           onExport={exportProjects}
           onImport={importProjects}
           onReset={resetProjects}
+          onRestartOnboarding={restartOnboarding}
           onCreateCollection={addCollection}
           onRenameCollection={editCollectionName}
           onMoveCollection={reorderCollection}
           onDeleteCollection={removeCollection}
+          onOpenTrash={openTrash}
+          trashCount={trashState.entries.length}
         />
       )}
 

@@ -10,6 +10,7 @@ import {
   Copy,
   Cpu,
   Database,
+  DownloadSimple,
   FileText,
   FileCode,
   FolderOpen,
@@ -31,6 +32,7 @@ import { ResourceAction } from "../components/ResourceAction.jsx";
 import { StatusBadge } from "../components/StatusBadge.jsx";
 import { writeClipboardText } from "../utils/clipboard.js";
 import { getProjectIcon } from "../utils/projectIcons.js";
+import { useConfirmDialog } from "../components/ConfirmDialog.jsx";
 
 function InlineEmpty({ children }) {
   return <p className="inline-empty">{children}</p>;
@@ -64,6 +66,7 @@ export function ProjectDetailPage({
   onEdit,
   onDuplicate,
   onDelete,
+  onExportProject,
   onToggleTask,
   onOpenSync,
   onOpenCodexContext,
@@ -71,6 +74,7 @@ export function ProjectDetailPage({
 }) {
   const Icon = getProjectIcon(project);
   const [copyStatus, setCopyStatus] = useState(null);
+  const confirmDialog = useConfirmDialog();
   const activeBlockers = project.blockers.filter((item) => !item.done);
 
   useEffect(() => {
@@ -97,6 +101,17 @@ export function ProjectDetailPage({
     }
   };
 
+  const handleExport = async () => {
+    const ok = await confirmDialog({
+      title: "导出项目",
+      message: `确定导出项目“${project.name}”吗？`,
+      detail: "导出文件将包含此项目及其关联的研究笔记、版本历史、变更事件与项目集合关联。",
+      confirmText: "导出",
+    });
+    if (!ok) return;
+    onExportProject();
+  };
+
   const previewDetail = project.demoUrl ? "打开本地运行地址" : (project.previewPath ?? "暂未配置");
 
   return (
@@ -110,6 +125,10 @@ export function ProjectDetailPage({
           <button className="secondary-button" onClick={onOpenCodexContext}>
             <FileCode size={17} />
             生成 Codex 上下文
+          </button>
+          <button className="secondary-button" onClick={handleExport}>
+            <DownloadSimple size={17} />
+            导出
           </button>
           <button className="secondary-button" onClick={onEdit}>
             <PencilSimple size={17} />
