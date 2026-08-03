@@ -20,6 +20,7 @@ import { createProjectRecord, EMPTY_PROJECT_DRAFT } from "./projects.js";
 import { createResearchNoteRecord } from "./researchNotes.js";
 import { addResearchNoteHistorySnapshot } from "./noteWorkspace.js";
 import { createProjectCreatedEvent, createResearchNoteEvent } from "./projectEvents.js";
+import { createEvaluationRecord } from "./evaluations.js";
 import { createAppBackup, importAppBackup } from "./backup.js";
 
 function projectDraft(name = "测试项目") {
@@ -329,4 +330,61 @@ test("保存时自动清理过期条目", () => {
   const loaded = loadTrashStore(storage);
   assert.equal(loaded.entries.length, 1);
   assert.equal(loaded.entries[0].id, fresh.id);
+});
+
+test("软删除项目会移出关联评测结果并在恢复时还原", () => {
+  const project = makeProject("评测项目");
+  const other = makeProject("其他项目");
+  const evaluation = createEvaluationRecord(
+    { projectId: project.id, metric: "准确率", value: "92.3%", evaluatedAt: "2026-08-01" },
+    [],
+    [project, other],
+  );
+  const otherEvaluation = createEvaluationRecord(
+    { projectId: other.id, metric: "延迟", value: "1.2s", evaluatedAt: "2026-08-02" },
+    [evaluation],
+    [project, other],
+  );
+
+  const deleted = softDeleteProject(
+    project.id,
+    [project, other],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [evaluation, otherEvaluation],
+  );
+  assert.equal(deleted.evaluations.length, 1);
+  assert.equal(deleted.evaluations[0].id, otherEvaluation.id);
+  assert.equal(deleted.entry.evaluations.length, 1);
+  assert.equal(deleted.entry.evaluations[0].id, evaluation.id);
+
+  const restored = restoreTrashEntry(deleted.entry, [], [], [], [], [], [otherEvaluation]);
+  assert.equal(restored.projects.length, 1);
+  assert.equal(restored.projects[0].id, project.id);
+  assert.equal(restored.evaluations.length, 2);
+  assert.ok(restored.evaluations.some((item) => item.id === evaluation.id));
+  assert.ok(restored.evaluations.some((item) => item.id === otherEvaluation.id));
+});
+
+test("恢复项目时遇到评测 ID 冲突会重新生成并保留项目关联", () => {
+  const project = makeProject("冲突项目");
+  const evaluation = createEvaluationRecord(
+    { projectId: project.id, metric: "准确率", value: "92.3%", evaluatedAt: "2026-08-01" },
+    [],
+    [project],
+  );
+  const deleted = softDeleteProject(project.id, [project], [], [], [], [], [], [evaluation]);
+
+  const restored = restoreTrashEntry(deleted.entry, [project], [], [], [], [], [evaluation]);
+  assert.equal(restored.evaluations.length, 2);
+  assert.equal(new Set(restored.evaluations.map((item) => item.id)).size, 2);
+  const importedProject = restored.projects.find((item) => item.id !== project.id);
+  const importedEvaluation = restored.evaluations.find((item) => item.id !== evaluation.id);
+  assert.equal(importedEvaluation.projectId, importedProject.id);
+  assert.ok(
+    restored.evaluations.some((item) => item.id === evaluation.id && item.projectId === project.id),
+  );
 });

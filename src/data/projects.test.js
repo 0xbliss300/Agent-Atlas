@@ -12,6 +12,7 @@ import {
   importProjectBackup,
   loadProjectStore,
   normalizeProject,
+  projectToDraft,
   PROJECT_STORAGE_KEY,
   PROJECT_STATUSES,
   saveProjectStore,
@@ -269,6 +270,69 @@ test("旧项目缺少日志时研究笔记安全回退为空列表", () => {
     createResearchNotes([{ id: "legacy", updatedTimestamp: 0, log: undefined }]),
     [],
   );
+});
+
+test("Agent 专属字段随项目创建、回填草稿、编辑更新与备份导入往返一致", () => {
+  const created = createProjectRecord(
+    draft("Agent 字段项目", {
+      agentModelVersion: "GPT-5 2026-08",
+      agentPromptVersion: "v1.3.0 / commit abc123",
+      agentDatasetsText: "私有知识库, MMLU 子集",
+      agentRuntime: "Node 22 / Ollama",
+      agentTokenCost: "~$0.012/次",
+      agentInferenceParams: "temperature=0.2, max_tokens=4096",
+    }),
+    [],
+  );
+  assert.equal(created.agentProfile.modelVersion, "GPT-5 2026-08");
+  assert.equal(created.agentProfile.promptVersion, "v1.3.0 / commit abc123");
+  assert.deepEqual(created.agentProfile.datasets, ["私有知识库", "MMLU 子集"]);
+  assert.equal(created.agentProfile.runtime, "Node 22 / Ollama");
+  assert.equal(created.agentProfile.tokenCost, "~$0.012/次");
+  assert.equal(created.agentProfile.inferenceParams, "temperature=0.2, max_tokens=4096");
+
+  const roundTrip = projectToDraft(created);
+  assert.equal(roundTrip.agentModelVersion, "GPT-5 2026-08");
+  assert.equal(roundTrip.agentDatasetsText, "私有知识库, MMLU 子集");
+  assert.equal(roundTrip.agentInferenceParams, "temperature=0.2, max_tokens=4096");
+
+  const edited = updateProjectRecord(
+    created.id,
+    { ...projectToDraft(created), agentModelVersion: "Claude 4.5", agentDatasetsText: "" },
+    [created],
+  );
+  assert.equal(edited.agentProfile.modelVersion, "Claude 4.5");
+  assert.deepEqual(edited.agentProfile.datasets, []);
+  assert.equal(edited.agentProfile.promptVersion, created.agentProfile.promptVersion);
+
+  const backup = createProjectBackup([edited]);
+  const imported = importProjectBackup(backup, [], "replace");
+  assert.equal(imported.projects[0].agentProfile.modelVersion, "Claude 4.5");
+  assert.deepEqual(imported.projects[0].agentProfile.datasets, []);
+});
+
+test("旧项目缺少 agentProfile 时安全迁移为空 Agent 字段", () => {
+  const legacy = normalizeProject({
+    id: "legacy-project",
+    name: "旧项目",
+    short: "缺少 Agent 字段的旧项目",
+    milestone: "迁移到新结构",
+    status: "active",
+    progress: 30,
+    updatedAt: "2026-07-25T10:00:00.000+08:00",
+  });
+  assert.deepEqual(legacy.agentProfile, {
+    modelVersion: "",
+    promptVersion: "",
+    datasets: [],
+    runtime: "",
+    tokenCost: "",
+    inferenceParams: "",
+  });
+  // 迁移后可通过草稿重新编辑写入
+  const edited = updateProjectRecord(legacy.id, projectToDraft(legacy), [legacy]);
+  assert.equal(edited.agentProfile.modelVersion, "");
+  assert.deepEqual(edited.agentProfile.datasets, []);
 });
 
 function projectToEditableDraft(project) {

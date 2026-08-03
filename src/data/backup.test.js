@@ -15,6 +15,7 @@ import {
   TEMPLATE_SCHEMA_VERSION,
 } from "./templates.js";
 import { COLLECTION_SCHEMA_VERSION, createCollection } from "./organization.js";
+import { createEvaluationRecord, EVALUATION_SCHEMA_VERSION } from "./evaluations.js";
 
 function projectDraft(name = "备份项目") {
   return {
@@ -282,4 +283,91 @@ test("单项目备份可合并导入，项目 ID 冲突时重映射并保持笔�
   );
   assert.equal(merged.collections.length, 2);
   assert.ok(merged.collections.some((item) => item.name === "核心集合（导入）"));
+});
+
+test("评测结果随完整备份导出并在替换导入后恢复", () => {
+  const project = createProjectRecord(projectDraft("评测项目"), []);
+  const evaluation = createEvaluationRecord(
+    { projectId: project.id, metric: "准确率", value: "92.3%", evaluatedAt: "2026-08-01" },
+    [],
+    [project],
+  );
+  const payload = JSON.parse(createAppBackup([project], [], [], [], [], [], [], [evaluation]));
+  assert.equal(payload.evaluationSchemaVersion, EVALUATION_SCHEMA_VERSION);
+  assert.equal(payload.evaluations[0].metric, "准确率");
+  const restored = importAppBackup(payload, [], [], "replace");
+  assert.equal(restored.evaluations.length, 1);
+  assert.equal(restored.evaluations[0].id, evaluation.id);
+  assert.equal(restored.evaluations[0].numericValue, 92.3);
+  assert.equal(restored.importedEvaluationsCount, 1);
+  assert.equal(restored.reassignedEvaluationIds, 0);
+});
+
+test("旧备份缺少评测数据时安全迁移为空评测结果", () => {
+  const project = createProjectRecord(projectDraft("旧项目"), []);
+  const payload = JSON.parse(createAppBackup([project]));
+  delete payload.evaluationSchemaVersion;
+  delete payload.evaluations;
+  const restored = importAppBackup(
+    payload,
+    [],
+    [],
+    "replace",
+    [],
+    [],
+    [],
+    [],
+    [],
+    [createEvaluationRecord({ projectId: "x", metric: "m", value: "1" }, [], [{ id: "x" }])],
+  );
+  assert.deepEqual(restored.evaluations, []);
+});
+
+test("合并备份时评测结果 ID 冲突会重新生成并保留项目关联", () => {
+  const project = createProjectRecord(projectDraft("冲突项目"), []);
+  const evaluation = createEvaluationRecord(
+    { projectId: project.id, metric: "准确率", value: "92.3%", evaluatedAt: "2026-08-01" },
+    [],
+    [project],
+  );
+  const merged = importAppBackup(
+    createAppBackup([project], [], [], [], [], [], [], [evaluation]),
+    [project],
+    [],
+    "merge",
+    [],
+    [],
+    [],
+    [],
+    [],
+    [evaluation],
+  );
+  assert.equal(merged.evaluations.length, 2);
+  assert.equal(new Set(merged.evaluations.map((item) => item.id)).size, 2);
+  const importedProject = merged.projects.find((item) => item.id !== project.id);
+  const importedEvaluation = merged.evaluations.find((item) => item.id !== evaluation.id);
+  assert.equal(importedEvaluation.projectId, importedProject.id);
+  assert.ok(
+    merged.evaluations.some((item) => item.id === evaluation.id && item.projectId === project.id),
+  );
+  assert.equal(merged.importedEvaluationsCount, 1);
+  assert.equal(merged.reassignedEvaluationIds, 1);
+});
+
+test("单项目导出仅包含该项目关联的评测结果", () => {
+  const projectA = createProjectRecord(projectDraft("项目 A"), []);
+  const projectB = createProjectRecord(projectDraft("项目 B"), [projectA]);
+  const evalA = createEvaluationRecord(
+    { projectId: projectA.id, metric: "准确率", value: "92%", evaluatedAt: "2026-08-01" },
+    [],
+    [projectA, projectB],
+  );
+  const evalB = createEvaluationRecord(
+    { projectId: projectB.id, metric: "延迟", value: "1.2s", evaluatedAt: "2026-08-02" },
+    [evalA],
+    [projectA, projectB],
+  );
+  const payload = JSON.parse(createSingleProjectBackup(projectA, [], [], [], [], [evalA, evalB]));
+  assert.equal(payload.evaluations.length, 1);
+  assert.equal(payload.evaluations[0].id, evalA.id);
 });

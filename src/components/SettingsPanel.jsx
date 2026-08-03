@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import { useDialogFocus } from "../hooks/useDialogFocus.js";
 import { CollectionManager } from "./CollectionManager.jsx";
+import { E2eSyncSettings } from "./E2eSyncSettings.jsx";
 
 export function SettingsPanel({
   close,
@@ -32,6 +33,16 @@ export function SettingsPanel({
   onDeleteCollection,
   onOpenTrash,
   trashCount = 0,
+  version = "",
+  e2eSyncEnabled = false,
+  e2eSyncConfig = {},
+  e2eSyncLastSyncedAt = "",
+  e2eSyncBusy = false,
+  e2eSyncError = "",
+  onToggleE2eSync,
+  onSaveE2eSyncConfig,
+  onPushE2eSync,
+  onPullE2eSync,
 }) {
   const panelRef = useRef(null);
   const closeRef = useRef(null);
@@ -104,6 +115,10 @@ export function SettingsPanel({
           <span>网络发布</span>
           <strong className="safe">已关闭</strong>
         </div>
+        <div className="setting-row">
+          <span>应用版本</span>
+          <strong>{version ? `v${version}` : "未配置"}</strong>
+        </div>
         <p className="settings-note">项目数据只保存在当前浏览器中，不会上传或发送到外部服务。</p>
 
         <section className="display-settings" aria-labelledby="display-settings-title">
@@ -158,6 +173,17 @@ export function SettingsPanel({
               <option value="compact">紧凑</option>
             </select>
           </label>
+          <label className="select-setting">
+            <span>主题</span>
+            <select
+              value={settings.theme ?? "system"}
+              onChange={(event) => onSettingsChange({ theme: event.target.value })}
+            >
+              <option value="system">跟随系统</option>
+              <option value="light">浅色</option>
+              <option value="dark">暗色</option>
+            </select>
+          </label>
           <button
             type="button"
             className="secondary-button"
@@ -192,6 +218,20 @@ export function SettingsPanel({
           onMove={onMoveCollection}
           onDelete={onDeleteCollection}
         />
+
+        {onToggleE2eSync && (
+          <E2eSyncSettings
+            enabled={e2eSyncEnabled}
+            syncConfig={e2eSyncConfig}
+            lastSyncedAt={e2eSyncLastSyncedAt}
+            busy={e2eSyncBusy}
+            error={e2eSyncError}
+            onToggleEnabled={onToggleE2eSync}
+            onSaveConfig={onSaveE2eSyncConfig}
+            onPush={onPushE2eSync}
+            onPull={onPullE2eSync}
+          />
+        )}
 
         <section className="data-tools" aria-labelledby="data-tools-title">
           <h3 id="data-tools-title">备份与恢复</h3>

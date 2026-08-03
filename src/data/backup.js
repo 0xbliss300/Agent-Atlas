@@ -28,6 +28,11 @@ import {
   normalizeCollection,
 } from "./organization.js";
 import { normalizeTrashEntry, serializeTrashEntry, TRASH_SCHEMA_VERSION } from "./trash.js";
+import {
+  EVALUATION_SCHEMA_VERSION,
+  importEvaluationBackup,
+  normalizeEvaluation,
+} from "./evaluations.js";
 
 export function createAppBackup(
   projects = [],
@@ -37,6 +42,7 @@ export function createAppBackup(
   templates = [],
   collections = [],
   trashEntries = [],
+  evaluations = [],
 ) {
   const payload = JSON.parse(createProjectBackup(projects));
   return JSON.stringify(
@@ -54,6 +60,8 @@ export function createAppBackup(
       collections: collections.map(normalizeCollection),
       trashSchemaVersion: TRASH_SCHEMA_VERSION,
       trash: trashEntries.map(serializeTrashEntry),
+      evaluationSchemaVersion: EVALUATION_SCHEMA_VERSION,
+      evaluations: evaluations.map(normalizeEvaluation),
     },
     null,
     2,
@@ -66,6 +74,7 @@ export function createSingleProjectBackup(
   histories = [],
   events = [],
   collections = [],
+  evaluations = [],
 ) {
   const payload = JSON.parse(createProjectBackup([project]));
   const projectNotes = notes.filter((note) => note.projectId === project.id);
@@ -76,6 +85,7 @@ export function createSingleProjectBackup(
   const projectCollections = collections.filter((collection) =>
     projectCollectionIds.has(collection.id),
   );
+  const projectEvaluations = evaluations.filter((item) => item.projectId === project.id);
 
   return JSON.stringify(
     {
@@ -88,6 +98,8 @@ export function createSingleProjectBackup(
       projectEvents: projectEvents.map(serializeProjectEvent),
       collectionSchemaVersion: COLLECTION_SCHEMA_VERSION,
       collections: projectCollections.map(normalizeCollection),
+      evaluationSchemaVersion: EVALUATION_SCHEMA_VERSION,
+      evaluations: projectEvaluations.map(normalizeEvaluation),
     },
     null,
     2,
@@ -139,6 +151,7 @@ export function importAppBackup(
   existingTemplates = [],
   existingCollections = [],
   existingTrash = [],
+  existingEvaluations = [],
 ) {
   const payload = parsePayload(raw);
   const projectResult = importProjectBackup(payload, existingProjects, mode);
@@ -148,6 +161,7 @@ export function importAppBackup(
   const hasTemplates = Object.hasOwn(payload ?? {}, "templates");
   const hasCollections = Object.hasOwn(payload ?? {}, "collections");
   const hasTrash = Object.hasOwn(payload ?? {}, "trash");
+  const hasEvaluations = Object.hasOwn(payload ?? {}, "evaluations");
 
   if (
     hasTrash &&
@@ -193,6 +207,22 @@ export function importAppBackup(
       }
     });
   }
+
+  if (
+    hasEvaluations &&
+    (payload.evaluationSchemaVersion !== EVALUATION_SCHEMA_VERSION ||
+      !Array.isArray(payload.evaluations))
+  ) {
+    throw new Error("评测结果备份版本或结构不受支持。");
+  }
+  const rawEvaluations = hasEvaluations ? payload.evaluations : [];
+  const evaluationResult = importEvaluationBackup(
+    { schemaVersion: EVALUATION_SCHEMA_VERSION, evaluations: rawEvaluations },
+    mode === "replace" ? [] : existingEvaluations,
+    projectResult.projects,
+    mode,
+    projectIdMap,
+  );
 
   if (
     hasResearchNotes &&
@@ -345,11 +375,14 @@ export function importAppBackup(
     templates: resolveImportedTemplateConflicts(importedTemplates, existingTemplates, mode),
     collections: collectionResult.collections,
     trash,
+    evaluations: evaluationResult.evaluations,
     noteIdMap,
     importedNotesCount: importedNotes.length,
     importedEventsCount: importedEvents.length,
     importedTemplatesCount: importedTemplates.length,
     importedCollectionsCount: collectionResult.importedCount,
+    importedEvaluationsCount: evaluationResult.importedCount,
     reassignedNoteIds,
+    reassignedEvaluationIds: evaluationResult.reassignedIds,
   };
 }

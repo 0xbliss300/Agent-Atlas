@@ -45,7 +45,7 @@ describe("CodexContextPanel", () => {
     expect(screen.getByLabelText("Codex 上下文 Markdown 预览")).toHaveTextContent("## 1. 项目目标");
     fireEvent.click(screen.getByRole("checkbox", { name: /研究笔记 4/ }));
     expect(screen.getByText("2 篇")).toBeInTheDocument();
-    expect(screen.getByText("字符数").nextElementSibling).not.toHaveTextContent("0");
+    expect(screen.getByText("字符数").nextElementSibling).toHaveTextContent(/^[1-9]\d*$/);
   });
 
   it("未选择笔记仍可生成并复制成功", async () => {

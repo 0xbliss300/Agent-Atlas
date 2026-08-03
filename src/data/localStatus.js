@@ -287,7 +287,7 @@ async function tryReadNestedFile(directory, path) {
   }
 }
 
-function mergeTechnology(current = {}, next = {}) {
+export function mergeTechnology(current = {}, next = {}) {
   const mergeList = (left, right) => {
     const merged = new Map();
     [...(left ?? []), ...(right ?? [])].forEach((item) => {
@@ -387,5 +387,6 @@ export async function analyzeLocalDirectory(directory) {
     git,
     project,
     notes,
+    bytesRead: totalBytes,
   };
 }

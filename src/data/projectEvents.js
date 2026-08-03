@@ -11,6 +11,7 @@ export const PROJECT_EVENT_TYPES = Object.freeze({
   BLOCKER: "blocker",
   LOCAL: "local",
   NOTE: "note",
+  EVAL: "eval",
 });
 
 const VALID_TYPES = new Set(Object.values(PROJECT_EVENT_TYPES));
@@ -78,6 +79,7 @@ export function normalizeProjectEvent(event, index = 0) {
   ) {
     throw new Error(`项目变更事件第 ${index + 1} 项结构无效。`);
   }
+  const rawSource = cleanText(event?.source, 20);
   return Object.freeze({
     id,
     projectId,
@@ -89,6 +91,7 @@ export function normalizeProjectEvent(event, index = 0) {
     summary,
     changes: Object.freeze((event.changes ?? []).map(normalizeChange)),
     subject: normalizeSubject(event.subject),
+    source: rawSource === "auto" ? "auto" : "user",
   });
 }
 
@@ -101,6 +104,7 @@ function createEvent(projectId, type, summary, options = {}, date = new Date()) 
     occurredAt: localIsoTimestamp(date),
     changes: options.changes ?? [],
     subject: options.subject ?? null,
+    source: options.source ?? "user",
   });
 }
 
@@ -196,7 +200,13 @@ export function createBlockerToggledEvent(before, after, blockerId, date = new D
   );
 }
 
-export function createLocalStatusEvent(before, after, syncResult = {}, date = new Date()) {
+export function createLocalStatusEvent(
+  before,
+  after,
+  syncResult = {},
+  date = new Date(),
+  source = "user",
+) {
   const fields = [
     ["status", "状态", before.statusLabel || before.status, after.statusLabel || after.status],
     ["progress", "完成度", `${before.progress}%`, `${after.progress}%`],
@@ -215,6 +225,7 @@ export function createLocalStatusEvent(before, after, syncResult = {}, date = ne
     {
       changes,
       subject: { kind: "local", id: after.id, title: sourceName, action: "applied" },
+      source,
     },
     date,
   );
@@ -243,6 +254,28 @@ export function createResearchNoteEvent(note, action, date = new Date(), previou
         title: note.title,
         action,
         sourceDeleted: action === "deleted",
+      },
+    },
+    date,
+  );
+}
+
+// 评测结果事件：记录评测指标的录入，参与变更时间线但不复制完整数据集。
+// summary 仅包含指标名、数值与评测日期，详情仍由评测列表承载。
+export function createEvaluationEvent(project, evaluation, date = new Date()) {
+  const metric = cleanText(evaluation?.metric, 60) || "未命名指标";
+  const value = cleanText(evaluation?.value, 60) || "未配置";
+  const evaluated = cleanText(evaluation?.evaluated, 10) || localIsoTimestamp(date).slice(0, 10);
+  return createEvent(
+    project.id,
+    PROJECT_EVENT_TYPES.EVAL,
+    `记录评测“${metric}”：${value}（${evaluated}）`,
+    {
+      subject: {
+        kind: "evaluation",
+        id: evaluation?.id,
+        title: `${metric}：${value}`,
+        action: "recorded",
       },
     },
     date,
@@ -311,6 +344,7 @@ export function serializeProjectEvent(event) {
           sourceDeleted: event.subject.sourceDeleted,
         }
       : null,
+    source: event.source ?? "user",
   };
 }
 

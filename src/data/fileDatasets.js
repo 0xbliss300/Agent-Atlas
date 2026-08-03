@@ -51,6 +51,11 @@ export const FILE_DATASETS = Object.freeze([
     storageKey: "agent-project-showcase.trash.v1",
     relativePath: "trash/trash.json",
   },
+  {
+    id: "evaluations",
+    storageKey: "agent-project-showcase.evaluations.v1",
+    relativePath: "evaluations/evaluations.json",
+  },
 ]);
 
 export const FILE_DATASET_BY_ID = Object.freeze(

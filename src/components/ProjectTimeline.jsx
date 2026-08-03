@@ -2,6 +2,7 @@ import {
   ArrowRight,
   CheckCircle,
   ClockCounterClockwise,
+  Exam,
   FolderOpen,
   NotePencil,
   SlidersHorizontal,
@@ -18,6 +19,7 @@ const TYPE_OPTIONS = [
   ["blocker", "阻塞项"],
   ["local", "本地读取"],
   ["note", "研究笔记"],
+  ["eval", "评测结果"],
 ];
 
 const TYPE_META = {
@@ -27,6 +29,7 @@ const TYPE_META = {
   blocker: { label: "阻塞", Icon: WarningCircle },
   local: { label: "本地读取", Icon: ClockCounterClockwise },
   note: { label: "研究笔记", Icon: NotePencil },
+  eval: { label: "评测", Icon: Exam },
 };
 
 export function ProjectTimeline({
@@ -87,7 +90,7 @@ export function ProjectTimeline({
                 </div>
                 <article>
                   <div className="timeline-event-meta">
-                    <span>{meta.label}</span>
+                    <span>{event.source === "auto" ? `自动${meta.label}` : meta.label}</span>
                     <time dateTime={event.occurredAt}>
                       {event.occurred} {event.occurredTime}
                     </time>

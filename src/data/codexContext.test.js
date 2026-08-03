@@ -31,6 +31,14 @@ const completeProject = {
     dataSources: ["Markdown"],
     runCommand: "npm run dev",
   },
+  agentProfile: {
+    modelVersion: "GPT-5 2026-08",
+    promptVersion: "v1.3.0 / commit abc123",
+    datasets: ["私有知识库", "MMLU 子集"],
+    runtime: "Node 22 / Ollama",
+    tokenCost: "~$0.012/次",
+    inferenceParams: "temperature=0.2, max_tokens=4096",
+  },
   localPath: "E:\\work\\agent",
   repositoryUrl: "https://example.com/repo?q=原始",
   documentationPath: "README.md",
@@ -60,11 +68,12 @@ test("生成稳定章节并只包含未完成任务和未解决阻塞项", () =>
     "## 3. 未解决阻塞项",
     "## 4. 未完成任务",
     "## 5. 技术栈",
-    "## 6. 运行命令",
-    "## 7. 本地资源",
-    "## 8. 最近开发记录",
-    "## 9. 研究笔记索引",
-    "## 10. 已选研究笔记",
+    "## 6. Agent 技术档案",
+    "## 7. 运行命令",
+    "## 8. 本地资源",
+    "## 9. 最近开发记录",
+    "## 10. 研究笔记索引",
+    "## 11. 已选研究笔记",
   ]);
   assert.match(markdown, /- \[ \] 等待模型评估/);
   assert.match(markdown, /- \[ \] 完成任务清单/);
@@ -83,6 +92,27 @@ test("缺失字段仍生成完整上下文并明确标记", () => {
   assert.match(markdown, /一句话简介：未配置/);
   assert.match(markdown, /未配置（当前没有相关条目）。/);
   assert.match(markdown, /未选择研究笔记/);
+});
+
+test("Agent 技术档案章节包含已配置字段并对缺失回退为未配置", () => {
+  const filled = generateCodexContext(completeProject, []);
+  assert.match(filled, /模型版本：GPT\\-5 2026\\-08/);
+  assert.match(filled, /Prompt 版本：v1\\.3\\.0 \/ commit abc123/);
+  assert.match(filled, /数据集：`私有知识库`、`MMLU 子集`/);
+  assert.match(filled, /运行环境：Node 22 \/ Ollama/);
+  assert.match(filled, /Token 成本：~\$0\\.012\/次/);
+  assert.match(filled, /推理参数：temperature=0\\.2, max\\_tokens=4096/);
+
+  const empty = generateCodexContext(
+    { name: "无 Agent 字段", blockers: [], nextTasks: [], technology: {}, log: [] },
+    [],
+  );
+  assert.match(empty, /模型版本：未配置/);
+  assert.match(empty, /Prompt 版本：未配置/);
+  assert.match(empty, /数据集：未配置/);
+  assert.match(empty, /运行环境：未配置/);
+  assert.match(empty, /Token 成本：未配置/);
+  assert.match(empty, /推理参数：未配置/);
 });
 
 test("多篇笔记按更新时间排序，默认仅选最近三篇", () => {

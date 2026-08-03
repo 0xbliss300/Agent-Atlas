@@ -8,6 +8,12 @@ export const ONBOARDING_STATES = Object.freeze({
   SKIPPED: "skipped",
 });
 
+export const THEME_OPTIONS = Object.freeze({
+  SYSTEM: "system",
+  LIGHT: "light",
+  DARK: "dark",
+});
+
 export const DEFAULT_SETTINGS = Object.freeze({
   showCompleted: true,
   sortBy: "updated",
@@ -15,11 +21,14 @@ export const DEFAULT_SETTINGS = Object.freeze({
   showRecent: true,
   enableShortcuts: true,
   onboardingState: ONBOARDING_STATES.PENDING,
+  e2eSyncEnabled: false,
+  theme: THEME_OPTIONS.SYSTEM,
 });
 
 const VALID_SORTS = new Set(["updated", "progress", "status"]);
 const VALID_DENSITIES = new Set(["standard", "compact"]);
 const VALID_ONBOARDING_STATES = new Set(Object.values(ONBOARDING_STATES));
+const VALID_THEMES = new Set(Object.values(THEME_OPTIONS));
 const STATUS_ORDER = Object.freeze({ active: 0, planning: 1, paused: 2, done: 3 });
 const VALID_STATUS_FILTERS = new Set(["all", ...Object.keys(STATUS_ORDER)]);
 
@@ -48,6 +57,11 @@ export function normalizeSettings(value = {}) {
     onboardingState: VALID_ONBOARDING_STATES.has(value.onboardingState)
       ? value.onboardingState
       : DEFAULT_SETTINGS.onboardingState,
+    e2eSyncEnabled:
+      typeof value.e2eSyncEnabled === "boolean"
+        ? value.e2eSyncEnabled
+        : DEFAULT_SETTINGS.e2eSyncEnabled,
+    theme: VALID_THEMES.has(value.theme) ? value.theme : DEFAULT_SETTINGS.theme,
   };
 }
 
@@ -75,9 +89,30 @@ export function saveSettings(settings, storage = getAppStorage()) {
   return normalized;
 }
 
+/**
+ * 将用户主题偏好解析为最终生效主题（light/dark）。
+ * - "light"/"dark" 直接返回；
+ * - "system" 根据 prefers-color-scheme 查询结果返回；
+ * - 无法查询（如 SSR 或不支持）时回退为 "light"。
+ */
+export function resolveTheme(theme, prefersDark = null) {
+  const normalized = VALID_THEMES.has(theme) ? theme : DEFAULT_SETTINGS.theme;
+  if (normalized === THEME_OPTIONS.LIGHT || normalized === THEME_OPTIONS.DARK) {
+    return normalized;
+  }
+  if (prefersDark === null) {
+    if (typeof globalThis.matchMedia !== "function") return THEME_OPTIONS.LIGHT;
+    return globalThis.matchMedia("(prefers-color-scheme: dark)").matches
+      ? THEME_OPTIONS.DARK
+      : THEME_OPTIONS.LIGHT;
+  }
+  return prefersDark ? THEME_OPTIONS.DARK : THEME_OPTIONS.LIGHT;
+}
+
 function matchesProjectQuery(project, query) {
   if (!query) return true;
   const technology = project.technology ?? {};
+  const agentProfile = project.agentProfile ?? {};
   const searchable = [
     project.name,
     project.short,
@@ -88,6 +123,12 @@ function matchesProjectQuery(project, query) {
     ...(technology.frameworks ?? []),
     ...(technology.models ?? []),
     ...(technology.dataSources ?? []),
+    agentProfile.modelVersion,
+    agentProfile.promptVersion,
+    ...(agentProfile.datasets ?? []),
+    agentProfile.runtime,
+    agentProfile.tokenCost,
+    agentProfile.inferenceParams,
   ]
     .filter(Boolean)
     .join("\n")

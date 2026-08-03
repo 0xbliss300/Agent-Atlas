@@ -40,7 +40,12 @@ export function createProjectImportDraft(result, existingProjects = [], now = ne
   const sourceProject = result.project;
   const sourceName = cleanText(result.sourceName) || "本地来源";
   const inferredName = cleanText(sourceProject.name);
-  const fallbackName = result.sourceType === "directory" ? sourceName : fileStem(sourceName);
+  const fallbackName =
+    result.sourceType === "directory"
+      ? sourceName
+      : result.sourceType === "git-repository"
+        ? sourceName.split("/").pop() || sourceName
+        : fileStem(sourceName);
   const name = inferredName || fallbackName;
   const technology = sourceProject.technology ?? {};
 
@@ -52,6 +57,7 @@ export function createProjectImportDraft(result, existingProjects = [], now = ne
     status: cleanText(sourceProject.status) || PROJECT_STATUSES.PLANNING,
     progress: Number.isFinite(sourceProject.progress) ? String(sourceProject.progress) : "0",
     milestone: cleanText(sourceProject.milestone),
+    repositoryUrl: cleanText(sourceProject.repositoryUrl),
     blockersText: checklistToText(sourceProject.blockers),
     nextTasksText: checklistToText(sourceProject.nextTasks),
     languagesText: listToText(technology.languages),
@@ -59,7 +65,10 @@ export function createProjectImportDraft(result, existingProjects = [], now = ne
     modelsText: listToText(technology.models),
     dataSourcesText: listToText(technology.dataSources),
     runCommand: cleanText(technology.runCommand),
-    logText: `从本地来源创建：${sourceName}`,
+    logText:
+      result.sourceType === "git-repository"
+        ? `从 Git 仓库导入：${sourceName}`
+        : `从本地来源创建：${sourceName}`,
   };
 
   const fieldStatus = {
@@ -69,6 +78,7 @@ export function createProjectImportDraft(result, existingProjects = [], now = ne
     status: fieldState(sourceProject.status),
     progress: fieldState(sourceProject.progress),
     milestone: fieldState(sourceProject.milestone),
+    repositoryUrl: fieldState(sourceProject.repositoryUrl),
     blockersText: fieldState(sourceProject.blockers),
     nextTasksText: fieldState(sourceProject.nextTasks),
     languagesText: fieldState(technology.languages),

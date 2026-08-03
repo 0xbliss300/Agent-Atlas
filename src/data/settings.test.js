@@ -5,6 +5,8 @@ import {
   loadSettings,
   saveSettings,
   selectVisibleProjects,
+  resolveTheme,
+  THEME_OPTIONS,
   SETTINGS_STORAGE_KEY,
 } from "./settings.js";
 function storage(initial = null) {
@@ -137,9 +139,99 @@ test("支持状态筛选以及名称、简介和技术关键词搜索", () => {
   );
 });
 
+test("Agent 专属字段纳入全局搜索并可命中所属项目", () => {
+  const withAgentProfile = [
+    {
+      id: "agent-eval",
+      name: "评测 Agent",
+      status: "active",
+      progress: 40,
+      updatedTimestamp: 40,
+      tags: [],
+      collectionIds: [],
+      pinned: false,
+      agentProfile: {
+        modelVersion: "GPT-5 2026-08",
+        promptVersion: "v1.3.0",
+        datasets: ["MMLU 子集"],
+        runtime: "Node 22",
+        tokenCost: "~$0.012/次",
+        inferenceParams: "temperature=0.2",
+      },
+    },
+  ];
+  assert.deepEqual(
+    selectVisibleProjects(withAgentProfile, DEFAULT_SETTINGS, { query: "GPT-5 2026-08" }).map(
+      (item) => item.id,
+    ),
+    ["agent-eval"],
+  );
+  assert.deepEqual(
+    selectVisibleProjects(withAgentProfile, DEFAULT_SETTINGS, { query: "MMLU" }).map(
+      (item) => item.id,
+    ),
+    ["agent-eval"],
+  );
+  assert.deepEqual(
+    selectVisibleProjects(withAgentProfile, DEFAULT_SETTINGS, { query: "temperature" }).map(
+      (item) => item.id,
+    ),
+    ["agent-eval"],
+  );
+  // 旧项目缺少 agentProfile 时搜索不报错且不误命中
+  const legacy = [{ id: "legacy", name: "旧项目", status: "active", updatedTimestamp: 1 }];
+  assert.deepEqual(
+    selectVisibleProjects(legacy, DEFAULT_SETTINGS, { query: "GPT-5" }).map((item) => item.id),
+    [],
+  );
+});
+
 test("最近更新排序中置顶优先且同组保持稳定排序", () => {
   assert.deepEqual(
     selectVisibleProjects(projects, DEFAULT_SETTINGS).map((item) => item.id),
     ["planning-high", "active-low", "done"],
   );
+});
+
+test("主题偏好默认为 system 且可保存 light/dark 并刷新后保留", () => {
+  assert.equal(DEFAULT_SETTINGS.theme, THEME_OPTIONS.SYSTEM);
+  const memory = storage();
+  saveSettings({ ...DEFAULT_SETTINGS, theme: THEME_OPTIONS.DARK }, memory);
+  assert.equal(loadSettings(memory).settings.theme, THEME_OPTIONS.DARK);
+  saveSettings({ ...DEFAULT_SETTINGS, theme: THEME_OPTIONS.LIGHT }, memory);
+  assert.equal(loadSettings(memory).settings.theme, THEME_OPTIONS.LIGHT);
+  saveSettings({ ...DEFAULT_SETTINGS, theme: THEME_OPTIONS.SYSTEM }, memory);
+  assert.equal(loadSettings(memory).settings.theme, THEME_OPTIONS.SYSTEM);
+});
+
+test("非法主题值回退为默认 system", () => {
+  const memory = storage();
+  saveSettings({ ...DEFAULT_SETTINGS, theme: "high-contrast" }, memory);
+  assert.equal(loadSettings(memory).settings.theme, THEME_OPTIONS.SYSTEM);
+  saveSettings({ ...DEFAULT_SETTINGS, theme: 123 }, memory);
+  assert.equal(loadSettings(memory).settings.theme, THEME_OPTIONS.SYSTEM);
+});
+
+test("旧版备份缺少 theme 字段时安全迁移为默认 system", () => {
+  const memory = storage(
+    JSON.stringify({
+      schemaVersion: 1,
+      settings: { ...DEFAULT_SETTINGS, theme: undefined },
+    }),
+  );
+  assert.equal(loadSettings(memory).settings.theme, THEME_OPTIONS.SYSTEM);
+});
+
+test("resolveTheme 直接返回 light/dark，system 跟随 prefersDark 参数", () => {
+  assert.equal(resolveTheme(THEME_OPTIONS.LIGHT, true), THEME_OPTIONS.LIGHT);
+  assert.equal(resolveTheme(THEME_OPTIONS.LIGHT, false), THEME_OPTIONS.LIGHT);
+  assert.equal(resolveTheme(THEME_OPTIONS.DARK, true), THEME_OPTIONS.DARK);
+  assert.equal(resolveTheme(THEME_OPTIONS.DARK, false), THEME_OPTIONS.DARK);
+  assert.equal(resolveTheme(THEME_OPTIONS.SYSTEM, true), THEME_OPTIONS.DARK);
+  assert.equal(resolveTheme(THEME_OPTIONS.SYSTEM, false), THEME_OPTIONS.LIGHT);
+});
+
+test("resolveTheme 对非法值回退为默认并按 system 处理", () => {
+  assert.equal(resolveTheme("unknown", true), THEME_OPTIONS.DARK);
+  assert.equal(resolveTheme("unknown", false), THEME_OPTIONS.LIGHT);
 });

@@ -33,6 +33,260 @@
   --disabled-opacity: 0.45;
 }
 
+/* ==========================================================================
+   Dark theme token remap (TODO-070)
+   - 仅在用户选择暗色时通过 [data-theme="dark"] 生效，不修改 :root 浅色规则。
+   - 暖纸与钴蓝在暗色下重新映射，保证 WCAG AA 对比度。
+   - 同时覆盖散落在浅色规则中的硬编码深色文字与浅色背景，保证暗色下可读。
+   ========================================================================== */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  color: #f0ece4;
+  background: #1a1d22;
+
+  --paper: #1a1d22;
+  --paper-light: #23262c;
+  --field-background: #2a2d33;
+  --ink: #f0ece4;
+  --muted: #a8a69e;
+  --line: #4a4842;
+  --line-soft: #3a3833;
+  --blue: #8aa5f0;
+  --blue-hover: #a3baf7;
+  --blue-soft: #1e2538;
+  --orange: #ffa452;
+  --green: #4ec878;
+  --danger: #e07a5f;
+  --danger-strong: #e88970;
+  --danger-border: #b85a3f;
+  --danger-background: #3a2018;
+
+  /* 暗色专用提示背景：暖色与成功色在暗色下的低饱和深色变体 */
+  --warn-soft-bg: #2e2618;
+  --warn-soft-text: #f0c98a;
+  --warn-soft-border: #6b5535;
+  --success-soft-bg: #1c2e24;
+  --success-soft-text: #7fd9a4;
+  --success-soft-border: #3c6650;
+  --tag-bg: rgba(138, 165, 240, 0.16);
+  --tag-border: #3a4a78;
+  --tag-text: #a3baf7;
+
+  --focus-ring: rgba(138, 165, 240, 0.4);
+  --focus-field-ring: rgba(138, 165, 240, 0.22);
+  --panel-shadow: -12px 0 30px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] body {
+  background: var(--paper);
+}
+
+/* 顶部/底部边框：浅色下用墨色，暗色下用暖白细边 */
+[data-theme="dark"] .site-header,
+[data-theme="dark"] .site-footer {
+  border-top-color: var(--ink);
+}
+
+/* —— 次要文字：统一用 --muted —— */
+[data-theme="dark"] .eyebrow,
+[data-theme="dark"] .meta-row,
+[data-theme="dark"] .project-card-meta,
+[data-theme="dark"] .note-meta,
+[data-theme="dark"] .timeline-meta,
+[data-theme="dark"] .settings-note,
+[data-theme="dark"] .previous-sync,
+[data-theme="dark"] .inline-empty,
+[data-theme="dark"] .import-status-summary,
+[data-theme="dark"] .sync-source-grid p,
+[data-theme="dark"] .codex-context-panel p,
+[data-theme="dark"] .codex-context-panel li,
+[data-theme="dark"] .local-safety p,
+[data-theme="dark"] .display-settings p,
+[data-theme="dark"] .data-tools p,
+[data-theme="dark"] .onboarding-tip-body p,
+[data-theme="dark"] .guide-toc button,
+[data-theme="dark"] .project-heading p {
+  color: var(--muted);
+}
+
+/* 项目表单/导入模式标签：浅色下 #343531，暗色下用主文字色 */
+[data-theme="dark"] .form-field,
+[data-theme="dark"] .import-mode {
+  color: var(--ink);
+}
+
+/* 品牌文字：浅色下 #2d3440，暗色下用主文字色 */
+[data-theme="dark"] .brand-cn {
+  color: var(--ink);
+}
+
+/* Markdown 正文：浅色下 #252722，暗色下用主文字色 */
+[data-theme="dark"] .markdown-body {
+  color: var(--ink);
+}
+
+[data-theme="dark"] .markdown-body blockquote {
+  color: var(--ink);
+}
+
+[data-theme="dark"] .markdown-body code {
+  background: var(--paper-light);
+}
+
+/* 文本域：浅色下 #202329，暗色下用主文字色 */
+[data-theme="dark"] textarea {
+  color: var(--ink);
+}
+
+/* —— 标签与代码：浅色下深蓝文字 + 浅蓝背景，暗色下用亮蓝 —— */
+[data-theme="dark"] .project-card-tags span {
+  background: var(--tag-bg);
+  border-color: var(--tag-border);
+  color: var(--tag-text);
+}
+
+[data-theme="dark"] .technology-tags code {
+  color: var(--tag-text);
+}
+
+/* —— 钴蓝信息块（local-safety/workbench-rule）：浅色下深蓝文字，暗色下用亮蓝 —— */
+[data-theme="dark"] .local-safety,
+[data-theme="dark"] .workbench-rule {
+  color: var(--blue);
+}
+
+/* —— 成功/检测状态：浅色下深绿，暗色下用亮绿 —— */
+[data-theme="dark"] .workbench-feedback {
+  background: var(--success-soft-bg);
+  border-color: var(--success-soft-border);
+  color: var(--success-soft-text);
+}
+
+[data-theme="dark"] .import-field-status.is-detected {
+  color: var(--green);
+}
+
+[data-theme="dark"] .note-field-diff ins {
+  color: var(--green);
+}
+
+[data-theme="dark"] .note-field-diff del {
+  color: var(--danger);
+}
+
+/* —— 暖色提示块：draft-recovery / context-privacy-warning / context-length-warning / settings-warning
+   浅色下 #fff5df 背景配 #6f4b16/#8a5421 文字，暗色下用深暖背景配浅暖文字 —— */
+[data-theme="dark"] .draft-recovery,
+[data-theme="dark"] .context-privacy-warning,
+[data-theme="dark"] .context-length-warning,
+[data-theme="dark"] .settings-warning {
+  background: var(--warn-soft-bg);
+  color: var(--warn-soft-text);
+}
+
+[data-theme="dark"] .draft-recovery {
+  border-color: var(--warn-soft-border);
+  border-left-color: var(--warn-soft-text);
+}
+
+[data-theme="dark"] .context-privacy-warning,
+[data-theme="dark"] .context-length-warning {
+  border-color: var(--warn-soft-border);
+}
+
+[data-theme="dark"] .settings-warning {
+  border-color: var(--warn-soft-border);
+}
+
+/* —— Blocker 徽章：浅色下 #fff1e8 背景，暗色下用危险色暗背景 —— */
+[data-theme="dark"] .timeline-event-blocker .timeline-marker,
+[data-theme="dark"] .workbench-item-blocker .workbench-item-icon {
+  background: var(--danger-background);
+  border-color: var(--danger-border);
+}
+
+[data-theme="dark"] .workbench-resolve:hover {
+  background: var(--danger-background);
+}
+
+/* —— 进度条轨道：浅色下 #d5d4d0，暗色下用线条色 —— */
+[data-theme="dark"] .progress-track {
+  background: var(--line-soft);
+}
+
+/* —— 半透明遮罩 —— */
+[data-theme="dark"] .scrim {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* —— 封面/空状态/引导封面：浅色下用 paper-light，暗色下保持一致 —— */
+[data-theme="dark"] .hero-cover,
+[data-theme="dark"] .empty-illustration,
+[data-theme="dark"] .onboarding-cover {
+  background: var(--paper-light);
+  border-color: var(--line-soft);
+}
+
+/* —— 表单控件：统一用字段背景 + 主文字色 + 线条边 —— */
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="url"],
+[data-theme="dark"] input[type="password"],
+[data-theme="dark"] input[type="search"],
+[data-theme="dark"] input[type="email"],
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  background: var(--field-background);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+/* —— 主按钮与危险按钮文字：浅色下 #fff，暗色下保持白色即可（按钮背景已重映射） —— */
+[data-theme="dark"] .danger-button {
+  color: #fff;
+}
+
+[data-theme="dark"] .primary-button {
+  color: #fff;
+}
+
+/* —— 次要正文段落：浅色下深灰 (#4e4d48 / #4e4e49 / #43443f)，暗色下用 muted 保持层级 —— */
+[data-theme="dark"] .hero-copy,
+[data-theme="dark"] .detail-intro > p,
+[data-theme="dark"] .notes-hero > div > p:last-child,
+[data-theme="dark"] .guide-hero > div > p:last-child,
+[data-theme="dark"] .onboarding-body p,
+[data-theme="dark"] .authored-note-entry .note-content p,
+[data-theme="dark"] .card-meta,
+[data-theme="dark"] .card-meta small {
+  color: var(--muted);
+}
+
+/* —— 更小的元数据标签：浅色下 #565651 / #666761 / #74746e / #71716b，暗色下统一 muted —— */
+[data-theme="dark"] .meta-label,
+[data-theme="dark"] .activity small,
+[data-theme="dark"] .persistence-status small,
+[data-theme="dark"] .github-link small,
+[data-theme="dark"] .site-footer {
+  color: var(--muted);
+}
+
+/* —— 错误块：浅色下深红文字 (#6d2819 / #884331) 配浅红背景，暗色下用亮红文字配深红背景 —— */
+[data-theme="dark"] .store-error,
+[data-theme="dark"] .store-error span {
+  color: var(--danger-strong);
+}
+
+/* —— 草稿恢复块内的次级段落：浅色下 #755621，暗色下用浅暖文字 —— */
+[data-theme="dark"] .draft-recovery > div:first-child > p:last-child {
+  color: var(--warn-soft-text);
+}
+
+/* —— 导入确认状态：浅色下 #995f08 暖色，暗色下用浅暖文字 —— */
+[data-theme="dark"] .import-field-status.is-confirm {
+  color: var(--warn-soft-text);
+}
+
 * {
   box-sizing: border-box;
 }

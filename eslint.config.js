@@ -8,6 +8,13 @@ const browserGlobals = {
   HTMLElement: "readonly",
   navigator: "readonly",
   window: "readonly",
+  TextEncoder: "readonly",
+  TextDecoder: "readonly",
+  crypto: "readonly",
+  btoa: "readonly",
+  atob: "readonly",
+  fetch: "readonly",
+  FileSystemObserver: "readonly",
 };
 
 export default [

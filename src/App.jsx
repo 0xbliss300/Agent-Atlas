@@ -8,8 +8,14 @@ import { Onboarding } from "./components/Onboarding.jsx";
 import { CodexContextPanel } from "./components/CodexContextPanel.jsx";
 import { LocalSyncPanel } from "./components/LocalSyncPanel.jsx";
 import { ProjectFormPanel } from "./components/ProjectFormPanel.jsx";
+import { BatchImportPanel } from "./components/BatchImportPanel.jsx";
 import { SettingsPanel } from "./components/SettingsPanel.jsx";
 import { createAppBackup, createSingleProjectBackup, importAppBackup } from "./data/backup.js";
+import { createProjectsBatch } from "./data/batchImport.js";
+import { createAutoSyncManager } from "./data/autoSync.js";
+import { loadSyncConfig, saveSyncConfig, isSyncConfigComplete } from "./data/e2eSyncConfig.js";
+import { pushToRemote, pullFromRemote } from "./data/e2eSync.js";
+import { generateDeviceId } from "./data/crypto.js";
 import {
   applyProjectStatusSync,
   createProjectRecord,
@@ -53,6 +59,7 @@ import {
   createLocalStatusEvent,
   createProjectCreatedEvent,
   createProjectUpdatedEvent,
+  createEvaluationEvent,
   createResearchNoteEvent,
   createTaskToggledEvent,
   loadProjectEventStore,
@@ -75,6 +82,7 @@ import {
 } from "./data/templates.js";
 import { loadSettings, saveSettings, selectVisibleProjects } from "./data/settings.js";
 import { getProjectTagOptions } from "./data/settings.js";
+import { resolveTheme, THEME_OPTIONS } from "./data/settings.js";
 import {
   clearRecentAccess,
   loadRecentAccess,
@@ -99,10 +107,19 @@ import {
   saveCollectionStore,
   sortCollections,
 } from "./data/organization.js";
+import {
+  createEvaluationRecord,
+  deleteEvaluationRecord,
+  importEvaluationBackup,
+  loadEvaluationStore,
+  saveEvaluationStore,
+  selectProjectEvaluations,
+} from "./data/evaluations.js";
 import { useRoute } from "./hooks/useRoute.js";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts.js";
 import { useFilePersistenceStatus } from "./hooks/useFilePersistenceStatus.js";
 import { retryFilePersistence } from "./data/filePersistence.js";
+import { APP_VERSION } from "./version.js";
 import { NotFoundPage } from "./pages/NotFoundPage.jsx";
 import { OverviewPage } from "./pages/OverviewPage.jsx";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage.jsx";
@@ -131,10 +148,23 @@ export function App() {
   const [settingsState, setSettingsState] = useState(() => loadSettings());
   const [recentAccessState, setRecentAccessState] = useState(() => loadRecentAccess());
   const [trashState, setTrashState] = useState(() => loadTrashStore());
+  const [evaluationState, setEvaluationState] = useState(() => loadEvaluationStore());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [formState, setFormState] = useState(null);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [syncProjectId, setSyncProjectId] = useState(null);
   const [contextProjectId, setContextProjectId] = useState(null);
+  const [autoSyncState, setAutoSyncState] = useState({
+    watched: new Set(),
+    errors: {},
+  });
+  const [e2eSyncConfigState, setE2eSyncConfigState] = useState(() => loadSyncConfig());
+  const [e2eSyncBusy, setE2eSyncBusy] = useState(false);
+  const [e2eSyncError, setE2eSyncError] = useState("");
+  const autoSyncManagerRef = useRef(null);
+  if (!autoSyncManagerRef.current) {
+    autoSyncManagerRef.current = createAutoSyncManager();
+  }
   const [projectQuery, setProjectQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
@@ -150,6 +180,8 @@ export function App() {
   const [paletteHelp, setPaletteHelp] = useState(false);
 
   const projects = storeState.projects;
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
   const settings = settingsState.settings;
   const dataStoreError =
     storeState.error ||
@@ -275,6 +307,32 @@ export function App() {
     document.title = getPageTitle(route, project, researchNote);
   }, [route, project, researchNote]);
 
+  // TODO-070: 根据用户主题偏好应用 data-theme 到 <html>，并监听系统主题变化。
+  // - theme 为 "light"/"dark" 时直接生效；
+  // - theme 为 "system" 时跟随 prefers-color-scheme，系统切换时实时更新。
+  useEffect(() => {
+    const root = document.documentElement;
+    if (settings.theme === THEME_OPTIONS.SYSTEM) {
+      const query = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
+      const apply = () => {
+        root.dataset.theme = resolveTheme(THEME_OPTIONS.SYSTEM, query?.matches ?? false);
+      };
+      apply();
+      if (query) {
+        query.addEventListener("change", apply);
+        return () => query.removeEventListener("change", apply);
+      }
+      return undefined;
+    }
+    root.dataset.theme = settings.theme;
+    return undefined;
+  }, [settings.theme]);
+
+  useEffect(() => {
+    const manager = autoSyncManagerRef.current;
+    return () => manager?.unwatchAll();
+  }, []);
+
   useEffect(() => {
     if (tagFilter !== "all" && !tagOptions.includes(tagFilter)) setTagFilter("all");
   }, [tagFilter, tagOptions]);
@@ -362,6 +420,11 @@ export function App() {
   const persistProjectEvents = (nextEvents) => {
     saveProjectEventStore(nextEvents);
     setProjectEventState({ events: nextEvents, error: null });
+  };
+
+  const persistEvaluations = (nextEvaluations) => {
+    saveEvaluationStore(nextEvaluations);
+    setEvaluationState({ evaluations: nextEvaluations, error: null });
   };
 
   const persistTemplates = (nextTemplates) => {
@@ -514,6 +577,73 @@ export function App() {
     }
   };
 
+  const addEvaluation = (projectId, draft) => {
+    if (evaluationState.error) {
+      return { ok: false, error: evaluationState.error };
+    }
+    try {
+      const evaluation = createEvaluationRecord(
+        { ...draft, projectId },
+        evaluationState.evaluations,
+        projects,
+      );
+      const nextEvaluations = [...evaluationState.evaluations, evaluation];
+      persistEvaluations(nextEvaluations);
+      const project = projects.find((item) => item.id === projectId);
+      const timelineError = recordProjectEvent(
+        createEvaluationEvent(project, evaluation),
+        projectEventState.events,
+      );
+      showNotice(
+        timelineError ? `评测已记录。${timelineError}。` : `已记录评测“${evaluation.metric}”。`,
+      );
+      return { ok: true };
+    } catch (error) {
+      const wrapped = new Error(error.message || "记录评测失败。");
+      wrapped.fields = error.fields;
+      return { ok: false, error: wrapped };
+    }
+  };
+
+  const removeEvaluation = (evaluationId) => {
+    if (evaluationState.error) return { ok: false, error: evaluationState.error };
+    try {
+      persistEvaluations(deleteEvaluationRecord(evaluationId, evaluationState.evaluations));
+      showNotice("已删除该评测结果。");
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error.message || "删除评测失败。" };
+    }
+  };
+
+  const importEvaluations = (raw, projectId) => {
+    if (evaluationState.error) {
+      return { ok: false, error: evaluationState.error };
+    }
+    try {
+      const result = importEvaluationBackup(
+        raw,
+        evaluationState.evaluations,
+        projects,
+        "merge",
+        {},
+      );
+      persistEvaluations(result.evaluations);
+      const scopedCount = projectId
+        ? result.evaluations.filter((item) => item.projectId === projectId).length -
+          evaluationState.evaluations.filter((item) => item.projectId === projectId).length
+        : result.importedCount;
+      showNotice(
+        `已导入 ${result.importedCount} 条评测结果${
+          result.reassignedIds ? `，${result.reassignedIds} 条冲突 ID 已重新生成` : ""
+        }。`,
+      );
+      return { ok: true, importedCount: scopedCount };
+    } catch (error) {
+      return { ok: false, error: error.message || "导入评测失败。" };
+    }
+  };
+
   const saveResearchNoteDraft = (key, draft, noteId = "") => {
     if (noteDraftState.error) {
       return { ok: false, error: noteDraftState.error };
@@ -608,6 +738,27 @@ export function App() {
     }
   };
 
+  const openBatch = () => {
+    if (storeState.error) return;
+    setFormState(null);
+    setBatchOpen(true);
+  };
+
+  const createBatchProjects = (drafts, selectedKeys, existingProjects) => {
+    const { created, failed } = createProjectsBatch(drafts, selectedKeys, existingProjects);
+    if (created.length) {
+      persistProjects([...projects, ...created]);
+      created.forEach((project) => {
+        recordProjectEvent(createProjectCreatedEvent(project));
+      });
+      const failedNote = failed.length ? `；${failed.length} 个失败已跳过。` : "";
+      showNotice(`已批量创建 ${created.length} 个项目${failedNote}`);
+    } else if (failed.length) {
+      showNotice("批量创建全部失败，请检查草稿字段后重试。", "error");
+    }
+    return { created, failed };
+  };
+
   const editProject = (draft) => {
     try {
       const edited = updateProjectRecord(formState.projectId, draft, projects);
@@ -666,6 +817,7 @@ export function App() {
         projectEventState.events,
         noteDraftState.drafts,
         trashState.entries,
+        evaluationState.evaluations,
       );
       persistProjects(result.projects);
       persistResearchNotes(result.notes);
@@ -673,6 +825,7 @@ export function App() {
       persistProjectEvents(result.events);
       persistResearchNoteDrafts(result.drafts);
       persistTrash(result.trashEntries);
+      persistEvaluations(result.evaluations);
       showNotice(`已将项目“${project.name}”移入回收站，可在 7 天内恢复。`);
       navigate("/");
     } catch (error) {
@@ -691,6 +844,7 @@ export function App() {
           templateState.templates,
           collections,
           trashState.entries,
+          evaluationState.evaluations,
         ),
       ],
       {
@@ -718,7 +872,9 @@ export function App() {
         collections.length +
         " 个项目集合和 " +
         trashState.entries.length +
-        " 条回收站条目。",
+        " 条回收站条目和 " +
+        evaluationState.evaluations.length +
+        " 条评测结果。",
     );
   };
 
@@ -735,6 +891,7 @@ export function App() {
     const projectCollections = collections.filter((collection) =>
       projectCollectionIds.has(collection.id),
     );
+    const projectEvaluations = selectProjectEvaluations(evaluationState.evaluations, project.id);
 
     const blob = new Blob(
       [
@@ -744,6 +901,7 @@ export function App() {
           projectHistories,
           projectEvents,
           projectCollections,
+          evaluationState.evaluations,
         ),
       ],
       { type: "application/json;charset=utf-8" },
@@ -768,9 +926,11 @@ export function App() {
         projectHistories.length +
         " 个历史版本、" +
         projectEvents.length +
-        " 条变更事件和 " +
+        " 条变更事件、" +
         projectCollections.length +
-        " 个项目集合。",
+        " 个项目集合和 " +
+        projectEvaluations.length +
+        " 条评测结果。",
     );
   };
 
@@ -786,6 +946,7 @@ export function App() {
         templateState.templates,
         collections,
         trashState.entries,
+        evaluationState.evaluations,
       );
       persistProjects(result.projects);
       persistResearchNotes(result.notes);
@@ -794,6 +955,7 @@ export function App() {
       persistTemplates(result.templates);
       persistCollections(result.collections);
       persistTrash(result.trash);
+      persistEvaluations(result.evaluations);
       showNotice(
         "已导入 " +
           result.importedCount +
@@ -805,7 +967,9 @@ export function App() {
           result.importedTemplatesCount +
           " 个自定义模板和 " +
           result.importedCollectionsCount +
-          " 个项目集合" +
+          " 个项目集合和 " +
+          result.importedEvaluationsCount +
+          " 条评测结果" +
           (result.reassignedIds ? "，" + result.reassignedIds + " 个冲突 ID 已重新生成" : "") +
           "。",
       );
@@ -827,12 +991,14 @@ export function App() {
         noteHistoryState.histories,
         projectEventState.events,
         noteDraftState.drafts,
+        evaluationState.evaluations,
       );
       persistProjects(result.projects);
       persistResearchNotes(result.notes);
       persistResearchNoteHistories(result.histories);
       persistProjectEvents(result.events);
       persistResearchNoteDrafts(result.drafts);
+      persistEvaluations(result.evaluations);
       persistTrash(permanentlyDeleteTrashEntry(entry.id, trashState.entries));
       const restoredName = entry.kind === "project" ? entry.project.name : entry.note.title;
       showNotice(`已恢复“${restoredName}”及其关联内容。`);
@@ -900,8 +1066,9 @@ export function App() {
       persistTemplates([]);
       persistCollections([]);
       persistTrash(emptyTrash());
+      persistEvaluations([]);
       setSettingsOpen(false);
-      showNotice("已清空全部项目、研究笔记、自定义模板、项目集合和回收站。");
+      showNotice("已清空全部项目、研究笔记、自定义模板、项目集合、回收站和评测结果。");
       navigate("/");
     } catch (error) {
       showNotice(error.message || "清空项目失败。", "error");
@@ -977,6 +1144,168 @@ export function App() {
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error.message || "本地状态同步失败。" };
+    }
+  };
+
+  const triggerAutoSync = (projectId, syncResult) => {
+    try {
+      const currentProjects = projectsRef.current;
+      const previous = findProjectById(currentProjects, projectId);
+      if (!previous) {
+        stopAutoSync(projectId);
+        return;
+      }
+      const nextProjects = applyProjectStatusSync(projectId, syncResult, currentProjects);
+      const nextProject = findProjectById(nextProjects, projectId);
+      persistProjects(nextProjects);
+      recordProjectEvent(
+        createLocalStatusEvent(previous, nextProject, syncResult, new Date(), "auto"),
+      );
+      projectsRef.current = nextProjects;
+    } catch (error) {
+      setAutoSyncState((prev) => ({
+        ...prev,
+        errors: { ...prev.errors, [projectId]: error.message || "自动同步失败。" },
+      }));
+    }
+  };
+
+  const startAutoSync = async (projectId) => {
+    try {
+      const picker = window.showDirectoryPicker;
+      if (!picker) {
+        setAutoSyncState((prev) => ({
+          ...prev,
+          errors: { ...prev.errors, [projectId]: "当前浏览器不支持目录监听。" },
+        }));
+        return;
+      }
+      const handle = await picker({ mode: "read" });
+      await autoSyncManagerRef.current.watch(projectId, handle, {
+        onSync: (syncResult) => triggerAutoSync(projectId, syncResult),
+        onError: (error) => {
+          setAutoSyncState((prev) => ({
+            ...prev,
+            errors: { ...prev.errors, [projectId]: error.message || "监听目录时出错。" },
+          }));
+        },
+      });
+      setAutoSyncState((prev) => ({
+        watched: new Set([...prev.watched, projectId]),
+        errors: { ...prev.errors, [projectId]: "" },
+      }));
+      showNotice("已开启自动状态同步，将监听目录变更。");
+    } catch (error) {
+      if (error?.name !== "AbortError") {
+        showNotice(error.message || "无法开启自动同步。", "error");
+      }
+    }
+  };
+
+  const stopAutoSync = (projectId) => {
+    autoSyncManagerRef.current.unwatch(projectId);
+    setAutoSyncState((prev) => {
+      const nextWatched = new Set(prev.watched);
+      nextWatched.delete(projectId);
+      const nextErrors = { ...prev.errors };
+      delete nextErrors[projectId];
+      return { watched: nextWatched, errors: nextErrors };
+    });
+    showNotice("已停止自动状态同步。");
+  };
+
+  const toggleE2eSync = (enabled) => {
+    updateSettings({ e2eSyncEnabled: enabled });
+    showNotice(enabled ? "已启用端到端加密同步。" : "已关闭端到端加密同步，本地数据不受影响。");
+  };
+
+  const saveE2eSyncConfig = (config) => {
+    try {
+      const deviceId = e2eSyncConfigState.config.deviceId || generateDeviceId();
+      const nextConfig = { ...config, deviceId };
+      const normalized = saveSyncConfig(nextConfig);
+      setE2eSyncConfigState({ config: normalized, error: null });
+      showNotice("同步配置已保存（不含口令）。");
+    } catch (error) {
+      showNotice(error.message || "保存同步配置失败。", "error");
+    }
+  };
+
+  const handlePushE2eSync = async (password) => {
+    if (!isSyncConfigComplete(e2eSyncConfigState.config)) {
+      setE2eSyncError("请先填写并保存 WebDAV 服务器地址与同步文件路径。");
+      return;
+    }
+    setE2eSyncBusy(true);
+    setE2eSyncError("");
+    try {
+      const { pushedAt } = await pushToRemote(
+        {
+          projects,
+          notes: researchNotes,
+          histories: noteHistoryState.histories,
+          events: projectEventState.events,
+          templates: projectTemplates,
+          collections,
+          trashEntries: trashState.entries,
+          evaluations: evaluationState.evaluations,
+        },
+        e2eSyncConfigState.config,
+        password,
+      );
+      const nextConfig = { ...e2eSyncConfigState.config, lastSyncedAt: pushedAt };
+      setE2eSyncConfigState({ config: saveSyncConfig(nextConfig), error: null });
+      showNotice("已推送到远端，同步完成。");
+    } catch (error) {
+      setE2eSyncError(error.message || "推送失败。");
+      showNotice("端到端同步推送失败。", "error");
+    } finally {
+      setE2eSyncBusy(false);
+    }
+  };
+
+  const handlePullE2eSync = async (password) => {
+    if (!isSyncConfigComplete(e2eSyncConfigState.config)) {
+      setE2eSyncError("请先填写并保存 WebDAV 服务器地址与同步文件路径。");
+      return;
+    }
+    setE2eSyncBusy(true);
+    setE2eSyncError("");
+    try {
+      const { result, remotePayload } = await pullFromRemote(
+        {
+          projects,
+          notes: researchNotes,
+          histories: noteHistoryState.histories,
+          events: projectEventState.events,
+          templates: projectTemplates,
+          collections,
+          trashEntries: trashState.entries,
+          evaluations: evaluationState.evaluations,
+        },
+        e2eSyncConfigState.config,
+        password,
+        { strategy: "merge" },
+      );
+      if (result.projects) persistProjects(result.projects);
+      if (result.notes) persistResearchNotes(result.notes);
+      if (result.histories) persistResearchNoteHistories(result.histories);
+      if (result.events) persistProjectEvents(result.events);
+      if (result.templates) persistTemplates(result.templates);
+      if (result.collections) persistCollections(result.collections);
+      if (result.trash) persistTrash(result.trash);
+      if (result.evaluations) persistEvaluations(result.evaluations);
+      const nextConfig = {
+        ...e2eSyncConfigState.config,
+        lastSyncedAt: remotePayload.pushedAt,
+      };
+      setE2eSyncConfigState({ config: saveSyncConfig(nextConfig), error: null });
+      showNotice("已从远端拉取并合并，同步完成。");
+    } catch (error) {
+      setE2eSyncError(error.message || "拉取失败。");
+      showNotice("端到端同步拉取失败。", "error");
+    } finally {
+      setE2eSyncBusy(false);
     }
   };
 
@@ -1228,6 +1557,18 @@ export function App() {
         onOpenSync={() => setSyncProjectId(project.id)}
         onOpenCodexContext={() => setContextProjectId(project.id)}
         onNewResearchNote={() => navigate(`/notes/new/project/${project.id}`)}
+        evaluations={selectProjectEvaluations(evaluationState.evaluations, project.id)}
+        evaluationStoreError={evaluationState.error}
+        onAddEvaluation={(draft) => addEvaluation(project.id, draft)}
+        onDeleteEvaluation={removeEvaluation}
+        onImportEvaluations={(raw) => importEvaluations(raw, project.id)}
+        autoSyncWatching={autoSyncState.watched.has(project.id)}
+        autoSyncError={autoSyncState.errors[project.id] ?? ""}
+        autoSyncSupported={Boolean(
+          typeof globalThis.FileSystemObserver !== "undefined" || globalThis.setInterval,
+        )}
+        onStartAutoSync={() => startAutoSync(project.id)}
+        onStopAutoSync={() => stopAutoSync(project.id)}
       />
     );
   } else {
@@ -1268,7 +1609,7 @@ export function App() {
         </Suspense>
         <footer className="site-footer">
           <div className="footer-meta">
-            <span>LOCAL-FIRST · PRIVATE · VERSION 1.0.0</span>
+            <span>LOCAL-FIRST · PRIVATE · VERSION {APP_VERSION}</span>
             <div
               className={`persistence-status persistence-${persistenceStatus.phase}`}
               role="status"
@@ -1356,6 +1697,16 @@ export function App() {
           onDeleteCollection={removeCollection}
           onOpenTrash={openTrash}
           trashCount={trashState.entries.length}
+          version={APP_VERSION}
+          e2eSyncEnabled={settings.e2eSyncEnabled}
+          e2eSyncConfig={e2eSyncConfigState.config}
+          e2eSyncLastSyncedAt={e2eSyncConfigState.config.lastSyncedAt}
+          e2eSyncBusy={e2eSyncBusy}
+          e2eSyncError={e2eSyncError}
+          onToggleE2eSync={toggleE2eSync}
+          onSaveE2eSyncConfig={saveE2eSyncConfig}
+          onPushE2eSync={handlePushE2eSync}
+          onPullE2eSync={handlePullE2eSync}
         />
       )}
 
@@ -1373,6 +1724,15 @@ export function App() {
           onDeleteTemplate={removeTemplate}
           onClose={() => setFormState(null)}
           onSave={formState.mode === "edit" ? editProject : createProject}
+          onOpenBatch={formState.mode === "create" ? openBatch : undefined}
+        />
+      )}
+
+      {batchOpen && (
+        <BatchImportPanel
+          existingProjects={projects}
+          onClose={() => setBatchOpen(false)}
+          onSaveBatch={createBatchProjects}
         />
       )}
 

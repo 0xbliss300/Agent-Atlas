@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { GitBranch, PencilSimple, Plus, X } from "@phosphor-icons/react";
+import { GitBranch, PencilSimple, Plus, Stack, X } from "@phosphor-icons/react";
 import {
   EMPTY_PROJECT_DRAFT,
   projectToDraft,
@@ -9,6 +9,7 @@ import {
 import { IMPORT_FIELD_STATUS } from "../data/projectImport.js";
 import { useDialogFocus } from "../hooks/useDialogFocus.js";
 import { useConfirmDialog } from "./ConfirmDialog.jsx";
+import { GitRepositoryImport } from "./GitRepositoryImport.jsx";
 import { ProjectImportSource } from "./ProjectImportSource.jsx";
 import { TemplateWorkspace } from "./TemplateWorkspace.jsx";
 
@@ -56,6 +57,7 @@ function ImportPreview({ info }) {
     status: "状态",
     progress: "完成度",
     milestone: "里程碑",
+    repositoryUrl: "GitHub 地址",
     blockersText: "阻塞问题",
     nextTasksText: "下一步任务",
     languagesText: "语言",
@@ -118,6 +120,7 @@ export function ProjectFormPanel({
   onDeleteTemplate,
   onClose,
   onSave,
+  onOpenBatch,
 }) {
   const editing = Boolean(project);
   const [draft, setDraft] = useState(() =>
@@ -252,6 +255,39 @@ export function ProjectFormPanel({
                   setSubmitError("");
                 }}
               />
+              <GitRepositoryImport
+                existingProjects={existingProjects}
+                onImported={(nextImport) => {
+                  setDraft(nextImport.draft);
+                  setImportInfo(nextImport);
+                  setErrors({});
+                  setSubmitError("");
+                }}
+              />
+              {onOpenBatch && (
+                <section className="project-import-source" aria-labelledby="batch-entry-title">
+                  <div className="project-import-heading">
+                    <div>
+                      <p className="eyebrow">BATCH IMPORT</p>
+                      <h3 id="batch-entry-title">批量导入多个项目</h3>
+                    </div>
+                    <span>适合一次性录入多个项目</span>
+                  </div>
+                  <div className="local-safety">
+                    <Stack size={23} weight="duotone" />
+                    <p>
+                      选择父目录批量扫描子项目，或上传 CSV/JSON
+                      文件；可在列表中勾选、预览后再批量创建。
+                    </p>
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <button className="secondary-button" type="button" onClick={onOpenBatch}>
+                      <Stack size={17} />
+                      打开批量导入面板
+                    </button>
+                  </div>
+                </section>
+              )}
               {importInfo && <ImportPreview info={importInfo} />}
             </>
           )}
@@ -457,7 +493,12 @@ export function ProjectFormPanel({
                   placeholder="E:\\Projects\\my-agent"
                 />
               </FormField>
-              <FormField label="GitHub 地址" name="repositoryUrl" error={errors.repositoryUrl}>
+              <FormField
+                label="GitHub 地址"
+                name="repositoryUrl"
+                error={errors.repositoryUrl}
+                importStatus={importInfo?.fieldStatus.repositoryUrl}
+              >
                 <input
                   name="repositoryUrl"
                   type="url"
@@ -624,6 +665,76 @@ export function ProjectFormPanel({
                   value={draft.logText}
                   onChange={update}
                   placeholder="完成项目初始化"
+                />
+              </FormField>
+            </div>
+          </details>
+
+          <details className="advanced-fields agent-profile-fields">
+            <summary>Agent 专属信息（可选）</summary>
+            <div className="form-grid advanced-grid">
+              <FormField
+                label="模型版本"
+                name="agentModelVersion"
+                hint="模型名称与版本锁定，例如 GPT-5 2026-08"
+              >
+                <input
+                  name="agentModelVersion"
+                  value={draft.agentModelVersion}
+                  onChange={update}
+                  placeholder="GPT-5 2026-08"
+                />
+              </FormField>
+              <FormField
+                label="Prompt 版本"
+                name="agentPromptVersion"
+                hint="提示词版本或来源，例如 v1.3.0 / commit abc123"
+              >
+                <input
+                  name="agentPromptVersion"
+                  value={draft.agentPromptVersion}
+                  onChange={update}
+                  placeholder="v1.3.0 / commit abc123"
+                />
+              </FormField>
+              <FormField label="数据集" name="agentDatasetsText" hint="使用逗号或换行分隔">
+                <input
+                  name="agentDatasetsText"
+                  value={draft.agentDatasetsText}
+                  onChange={update}
+                  placeholder="私有知识库, MMLU 子集"
+                />
+              </FormField>
+              <FormField label="运行环境" name="agentRuntime" hint="模型服务与依赖运行环境">
+                <input
+                  name="agentRuntime"
+                  value={draft.agentRuntime}
+                  onChange={update}
+                  placeholder="Node 22 / Python 3.12 / Ollama"
+                />
+              </FormField>
+              <FormField
+                label="Token 成本"
+                name="agentTokenCost"
+                hint="单次或周期成本，例如 ~$0.012/次"
+              >
+                <input
+                  name="agentTokenCost"
+                  value={draft.agentTokenCost}
+                  onChange={update}
+                  placeholder="~$0.012/次；月度约 $40"
+                />
+              </FormField>
+              <FormField
+                label="推理参数"
+                name="agentInferenceParams"
+                hint="temperature、top_p、max_tokens 等"
+              >
+                <input
+                  name="agentInferenceParams"
+                  value={draft.agentInferenceParams}
+                  onChange={update}
+                  placeholder="temperature=0.2, top_p=0.9, max_tokens=4096"
                 />
               </FormField>
             </div>

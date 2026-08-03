@@ -2,6 +2,7 @@ import { getAppStorage } from "./filePersistence.js";
 import { importAppBackup } from "./backup.js";
 import { serializeProjectEvent } from "./projectEvents.js";
 import { serializeResearchNoteHistory } from "./noteWorkspace.js";
+import { EVALUATION_SCHEMA_VERSION } from "./evaluations.js";
 
 export const TRASH_SCHEMA_VERSION = 1;
 export const TRASH_STORAGE_KEY = "agent-project-showcase.trash.v1";
@@ -46,6 +47,7 @@ export function serializeTrashEntry(entry) {
     histories: entry.histories,
     events: entry.events,
     drafts: entry.drafts,
+    evaluations: entry.evaluations,
   };
 }
 
@@ -71,6 +73,7 @@ export function normalizeTrashEntry(entry, index = 0) {
     histories: Array.isArray(entry?.histories) ? entry.histories : [],
     events: Array.isArray(entry?.events) ? entry.events : [],
     drafts: Array.isArray(entry?.drafts) ? entry.drafts : [],
+    evaluations: Array.isArray(entry?.evaluations) ? entry.evaluations : [],
   };
 }
 
@@ -88,6 +91,7 @@ export function createProjectTrashEntry(
   events = [],
   drafts = [],
   date = new Date(),
+  evaluations = [],
 ) {
   return normalizeTrashEntry({
     id: uniqueTrashEntryId(),
@@ -99,6 +103,7 @@ export function createProjectTrashEntry(
     histories: histories.map(serializeResearchNoteHistory),
     events: events.map(serializeProjectEvent),
     drafts,
+    evaluations,
   });
 }
 
@@ -129,6 +134,7 @@ export function softDeleteProject(
   events = [],
   drafts = [],
   trashEntries = [],
+  evaluations = [],
 ) {
   const project = projects.find((item) => item.id === projectId);
   if (!project) throw new Error("找不到需要删除的项目。");
@@ -138,6 +144,7 @@ export function softDeleteProject(
   const projectHistories = histories.filter((snapshot) => projectNoteIds.has(snapshot.noteId));
   const projectEvents = events.filter((event) => event.projectId === projectId);
   const projectDrafts = drafts.filter((draft) => draft.projectId === projectId);
+  const projectEvaluations = evaluations.filter((item) => item.projectId === projectId);
 
   const entry = createProjectTrashEntry(
     project,
@@ -145,6 +152,8 @@ export function softDeleteProject(
     projectHistories,
     projectEvents,
     projectDrafts,
+    new Date(),
+    projectEvaluations,
   );
 
   return {
@@ -154,6 +163,7 @@ export function softDeleteProject(
     histories: histories.filter((snapshot) => !projectNoteIds.has(snapshot.noteId)),
     events: events.filter((event) => event.projectId !== projectId),
     drafts: drafts.filter((draft) => draft.projectId !== projectId),
+    evaluations: evaluations.filter((item) => item.projectId !== projectId),
     trashEntries: cleanupTrash([entry, ...trashEntries]),
   };
 }
@@ -227,6 +237,8 @@ function buildProjectBackupPayload(entry) {
     researchNoteHistories: entry.histories,
     projectEventSchemaVersion: 1,
     projectEvents: entry.events,
+    evaluationSchemaVersion: EVALUATION_SCHEMA_VERSION,
+    evaluations: entry.evaluations,
   };
 }
 
@@ -251,6 +263,7 @@ export function restoreTrashEntry(
   existingHistories = [],
   existingEvents = [],
   existingDrafts = [],
+  existingEvaluations = [],
 ) {
   if (entry.kind === "project") {
     const payload = buildProjectBackupPayload(entry);
@@ -263,6 +276,8 @@ export function restoreTrashEntry(
       existingEvents,
       [],
       [],
+      [],
+      existingEvaluations,
     );
     const restoredDrafts = restoreDrafts(entry.drafts, result.idMap, result.noteIdMap);
     return {
@@ -286,6 +301,8 @@ export function restoreTrashEntry(
       existingEvents,
       [],
       [],
+      [],
+      existingEvaluations,
     );
     const restoredDrafts = restoreDrafts(entry.drafts, result.idMap, result.noteIdMap);
     return {

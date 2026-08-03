@@ -48,6 +48,12 @@ export const EMPTY_PROJECT_DRAFT = Object.freeze({
   tagsText: "",
   pinned: false,
   collectionIds: [],
+  agentModelVersion: "",
+  agentPromptVersion: "",
+  agentDatasetsText: "",
+  agentRuntime: "",
+  agentTokenCost: "",
+  agentInferenceParams: "",
 });
 
 function cleanText(value) {
@@ -271,6 +277,14 @@ export function normalizeProject(project, index = 0) {
       dataSources: normalizeTextList(project.technology?.dataSources),
       runCommand: cleanText(project.technology?.runCommand),
     }),
+    agentProfile: Object.freeze({
+      modelVersion: cleanText(project.agentProfile?.modelVersion),
+      promptVersion: cleanText(project.agentProfile?.promptVersion),
+      datasets: normalizeTextList(project.agentProfile?.datasets),
+      runtime: cleanText(project.agentProfile?.runtime),
+      tokenCost: cleanText(project.agentProfile?.tokenCost),
+      inferenceParams: cleanText(project.agentProfile?.inferenceParams),
+    }),
     localSync: project.localSync
       ? Object.freeze({
           sourceType: cleanText(project.localSync.sourceType),
@@ -327,6 +341,14 @@ export function createProjectRecord(draft, existingProjects = [], sourceMetadata
       dataSources: parseTextList(draft.dataSourcesText),
       runCommand: cleanText(draft.runCommand),
     },
+    agentProfile: {
+      modelVersion: cleanText(draft.agentModelVersion),
+      promptVersion: cleanText(draft.agentPromptVersion),
+      datasets: parseTextList(draft.agentDatasetsText),
+      runtime: cleanText(draft.agentRuntime),
+      tokenCost: cleanText(draft.agentTokenCost),
+      inferenceParams: cleanText(draft.agentInferenceParams),
+    },
     localSync: sourceMetadata,
   });
 }
@@ -359,6 +381,12 @@ export function projectToDraft(project) {
     modelsText: project.technology.models.join(", "),
     dataSourcesText: project.technology.dataSources.join(", "),
     runCommand: project.technology.runCommand,
+    agentModelVersion: project.agentProfile?.modelVersion ?? "",
+    agentPromptVersion: project.agentProfile?.promptVersion ?? "",
+    agentDatasetsText: (project.agentProfile?.datasets ?? []).join(", "),
+    agentRuntime: project.agentProfile?.runtime ?? "",
+    agentTokenCost: project.agentProfile?.tokenCost ?? "",
+    agentInferenceParams: project.agentProfile?.inferenceParams ?? "",
   };
 }
 

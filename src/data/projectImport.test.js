@@ -52,3 +52,30 @@ test("目录名兜底会标记需确认，并提示同名项目", () => {
   assert.equal(imported.duplicateName, true);
   assert.equal(imported.draft.localPath, "");
 });
+
+test("git-repository 来源映射 repositoryUrl 并以 repo 名兜底", () => {
+  const imported = createProjectImportDraft(
+    {
+      sourceType: "git-repository",
+      sourceName: "owner/demo-agent",
+      filesRead: ["repository metadata"],
+      git: { branch: "main", commit: "abc123" },
+      notes: ["读取仓库元数据"],
+      project: {
+        repositoryUrl: "https://github.com/owner/demo-agent",
+        short: "demo",
+      },
+    },
+    [],
+    new Date("2026-08-01T00:00:00.000Z"),
+  );
+  assert.equal(imported.draft.name, "demo-agent");
+  assert.equal(imported.draft.repositoryUrl, "https://github.com/owner/demo-agent");
+  assert.equal(imported.draft.logText, "从 Git 仓库导入：owner/demo-agent");
+  assert.equal(imported.fieldStatus.name, IMPORT_FIELD_STATUS.CONFIRM);
+  assert.equal(imported.fieldStatus.repositoryUrl, IMPORT_FIELD_STATUS.DETECTED);
+  assert.equal(imported.sourceMetadata.sourceType, "git-repository");
+  assert.equal(imported.sourceMetadata.branch, "main");
+  assert.equal(imported.sourceMetadata.commit, "abc123");
+  assert.equal(imported.sourceMetadata.syncedAt, "2026-08-01T00:00:00.000Z");
+});

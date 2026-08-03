@@ -22,6 +22,7 @@ import {
   NotePencil,
   PencilSimple,
   Plus,
+  Robot,
   TerminalWindow,
   Trash,
   WarningCircle,
@@ -30,6 +31,8 @@ import { ProgressBar } from "../components/ProgressBar.jsx";
 import { ProjectTimeline } from "../components/ProjectTimeline.jsx";
 import { ResourceAction } from "../components/ResourceAction.jsx";
 import { StatusBadge } from "../components/StatusBadge.jsx";
+import { EvaluationPanel } from "../components/EvaluationPanel.jsx";
+import { AutoSyncControl } from "../components/AutoSyncControl.jsx";
 import { writeClipboardText } from "../utils/clipboard.js";
 import { getProjectIcon } from "../utils/projectIcons.js";
 import { useConfirmDialog } from "../components/ConfirmDialog.jsx";
@@ -56,6 +59,16 @@ function TechnologyGroup({ Icon, label, items }) {
   );
 }
 
+function AgentProfileField({ Icon, label, value }) {
+  return (
+    <div className="technology-group run-command">
+      <Icon size={19} />
+      <span>{label}</span>
+      {value ? <code>{value}</code> : <small>未配置</small>}
+    </div>
+  );
+}
+
 export function ProjectDetailPage({
   project,
   researchNotes = [],
@@ -71,6 +84,16 @@ export function ProjectDetailPage({
   onOpenSync,
   onOpenCodexContext,
   onNewResearchNote,
+  evaluations = [],
+  evaluationStoreError = null,
+  onAddEvaluation,
+  onDeleteEvaluation,
+  onImportEvaluations,
+  autoSyncWatching = false,
+  autoSyncError = "",
+  autoSyncSupported = true,
+  onStartAutoSync,
+  onStopAutoSync,
 }) {
   const Icon = getProjectIcon(project);
   const [copyStatus, setCopyStatus] = useState(null);
@@ -417,6 +440,58 @@ export function ProjectDetailPage({
             读取本地状态
           </button>
         </div>
+
+        {onStartAutoSync && (
+          <AutoSyncControl
+            isWatching={autoSyncWatching}
+            lastError={autoSyncError}
+            supported={autoSyncSupported}
+            onStart={onStartAutoSync}
+            onStop={onStopAutoSync}
+          />
+        )}
+      </section>
+
+      <section className="detail-block agent-profile-block">
+        <div className="block-heading">
+          <div>
+            <p className="eyebrow">AGENT PROFILE</p>
+            <h2>Agent 技术档案</h2>
+          </div>
+          <Robot size={24} />
+        </div>
+        <div className="technology-list">
+          <AgentProfileField
+            Icon={Cpu}
+            label="模型版本"
+            value={project.agentProfile?.modelVersion}
+          />
+          <AgentProfileField
+            Icon={FileText}
+            label="Prompt 版本"
+            value={project.agentProfile?.promptVersion}
+          />
+          <TechnologyGroup
+            Icon={Database}
+            label="数据集"
+            items={project.agentProfile?.datasets ?? []}
+          />
+          <AgentProfileField
+            Icon={TerminalWindow}
+            label="运行环境"
+            value={project.agentProfile?.runtime}
+          />
+          <AgentProfileField
+            Icon={Cpu}
+            label="Token 成本"
+            value={project.agentProfile?.tokenCost}
+          />
+          <AgentProfileField
+            Icon={GearSix}
+            label="推理参数"
+            value={project.agentProfile?.inferenceParams}
+          />
+        </div>
       </section>
 
       <section className="detail-block roadmap-block">
@@ -483,6 +558,14 @@ export function ProjectDetailPage({
           <InlineEmpty>尚未创建 Markdown 研究笔记，可从这里开始记录项目研究过程。</InlineEmpty>
         )}
       </section>
+
+      <EvaluationPanel
+        evaluations={evaluations}
+        storeError={evaluationStoreError}
+        onAdd={onAddEvaluation}
+        onDelete={onDeleteEvaluation}
+        onImport={onImportEvaluations}
+      />
 
       <ProjectTimeline
         projectId={project.id}
